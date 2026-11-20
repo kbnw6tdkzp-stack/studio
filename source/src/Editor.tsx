@@ -38,6 +38,7 @@ export default function Editor() {
   const [saved, setSaved] = useState(true)
   const [tab, setTab] = useState<Tab | null>('design')
   const [uploads, setUploads] = useState<string[]>([])
+  const [busy, setBusy] = useState<string | null>(null)
 
   useEffect(() => {
     if (!design || !fit || !wrapRef.current) return
@@ -100,27 +101,42 @@ export default function Editor() {
     }
     i.src = src
   }
-  // Read an image and shrink it so designs stay small enough to save.
-  const readFile = (f: File | undefined, cb: (s: string) => void, max = 1600) => {
-    if (!f) return
-    const r = new FileReader()
-    r.onload = () => {
-      const src = r.result as string
+  // Scale an image down and compress it so designs stay small enough to save.
+  const shrink = (src: string, max: number) =>
+    new Promise<string>((resolve) => {
       const img = new window.Image()
       img.onload = () => {
         const k = Math.min(1, max / Math.max(img.width, img.height))
         const c = document.createElement('canvas')
         c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k))
         const ctx = c.getContext('2d')
-        if (!ctx) return cb(src)
+        if (!ctx) return resolve(src)
         ctx.drawImage(img, 0, 0, c.width, c.height)
         const out = c.toDataURL('image/webp', 0.85)
-        cb(out.startsWith('data:image/webp') ? out : c.toDataURL('image/png'))
+        resolve(out.startsWith('data:image/webp') ? out : c.toDataURL('image/png'))
       }
-      img.onerror = () => cb(src)
+      img.onerror = () => resolve(src)
       img.src = src
-    }
+    })
+  const readFile = (f: File | undefined, cb: (s: string) => void, max = 1600) => {
+    if (!f) return
+    const r = new FileReader()
+    r.onload = () => shrink(r.result as string, max).then(cb)
     r.readAsDataURL(f)
+  }
+  const removeBg = async (id: string, src: string, original?: string) => {
+    setBusy('Removing background… the first time it downloads a model (about 40 MB), so it can take a minute.')
+    try {
+      const { removeBackground } = await import('@imgly/background-removal')
+      const blob = await removeBackground(original ?? src, { output: { format: 'image/png' } })
+      const url: string = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = rej; r.readAsDataURL(blob) })
+      update(id, { src: await shrink(url, 1600), original: original ?? src } as Partial<El>)
+    } catch (e) {
+      console.error(e)
+      alert('Could not remove the background. Check your internet connection and try again.')
+    } finally {
+      setBusy(null)
+    }
   }
   const applyTemplate = (id: string) => {
     const t = TEMPLATES.find((x) => x.id === id)!
@@ -286,6 +302,13 @@ export default function Editor() {
                   <textarea className="inline-text" rows={1} value={sel.text} onChange={(e) => patch({ text: e.target.value })} />
                 </>
               )}
+              {sel.type === 'image' && (
+                <>
+                  <button className="primary" disabled={!!busy} onClick={() => removeBg(sel.id, sel.src, sel.original)}>✂ Remove background</button>
+                  {sel.original && <button disabled={!!busy} onClick={() => update(sel.id, { src: sel.original, original: undefined } as Partial<El>)}>Restore original</button>}
+                  <span className="divider" />
+                </>
+              )}
               {sel.type !== 'image' && (
                 <>
                   <span className="muted small">Colour</span>
@@ -328,6 +351,7 @@ export default function Editor() {
           <button className="ghost" onClick={() => setFit(true)}>Fit</button>
         </footer>
       </section>
+      {busy && <div className="busy"><div className="busy-box"><div className="spinner" />{busy}</div></div>}
     </div>
   )
 }

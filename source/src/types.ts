@@ -29,6 +29,7 @@ export interface ShapeEl extends BaseEl {
 export interface ImageEl extends BaseEl {
   type: 'image'
   src: string
+  original?: string // kept so background removal can be undone
 }
 export type El = TextEl | ShapeEl | ImageEl
 
