@@ -10,8 +10,8 @@ const LS = 'studio.designs'
 const readLocal = (): Design[] => {
   try { return JSON.parse(localStorage.getItem(LS) || '[]') } catch { return [] }
 }
-const writeLocal = (ds: Design[]) => {
-  try { localStorage.setItem(LS, JSON.stringify(ds)) } catch { alert('Browser storage is full. Remove some designs or images.') }
+const writeLocal = (ds: Design[]): boolean => {
+  try { localStorage.setItem(LS, JSON.stringify(ds)); return true } catch { return false }
 }
 
 async function userId() {
@@ -30,10 +30,16 @@ export async function listDesigns(): Promise<Design[]> {
 }
 
 export async function saveDesign(d: Design) {
-  const ds = readLocal().filter((x) => x.id !== d.id)
-  writeLocal([d, ...ds]) // always keep a local copy
-  if (supabase && (await userId())) {
-    await supabase.from('designs').upsert({ id: d.id, name: d.name, data: d, updated_at: new Date(d.updatedAt).toISOString() })
+  const signedIn = !!(supabase && (await userId()))
+  // keep a local copy; if the browser is full, keep just this design, then skip quietly when the cloud has it
+  const others = readLocal().filter((x) => x.id !== d.id)
+  let localOk = writeLocal([d, ...others])
+  if (!localOk) localOk = writeLocal([d])
+  if (signedIn) {
+    const { error } = await supabase!.from('designs').upsert({ id: d.id, name: d.name, data: d, updated_at: new Date(d.updatedAt).toISOString() })
+    if (error) { console.error(error); if (!localOk) alert('Could not save: ' + error.message) }
+  } else if (!localOk) {
+    alert('Your browser has no room left to save this design. Sign in to save it online, or use a smaller image.')
   }
 }
 

@@ -100,10 +100,26 @@ export default function Editor() {
     }
     i.src = src
   }
-  const readFile = (f: File | undefined, cb: (s: string) => void) => {
+  // Read an image and shrink it so designs stay small enough to save.
+  const readFile = (f: File | undefined, cb: (s: string) => void, max = 1600) => {
     if (!f) return
     const r = new FileReader()
-    r.onload = () => cb(r.result as string)
+    r.onload = () => {
+      const src = r.result as string
+      const img = new window.Image()
+      img.onload = () => {
+        const k = Math.min(1, max / Math.max(img.width, img.height))
+        const c = document.createElement('canvas')
+        c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k))
+        const ctx = c.getContext('2d')
+        if (!ctx) return cb(src)
+        ctx.drawImage(img, 0, 0, c.width, c.height)
+        const out = c.toDataURL('image/webp', 0.85)
+        cb(out.startsWith('data:image/webp') ? out : c.toDataURL('image/png'))
+      }
+      img.onerror = () => cb(src)
+      img.src = src
+    }
     r.readAsDataURL(f)
   }
   const applyTemplate = (id: string) => {
@@ -227,7 +243,7 @@ export default function Editor() {
                 {brand.logo && <button onClick={() => addImage(brand.logo!, 300)}>Add to design</button>}
                 <button onClick={() => logoRef.current?.click()}>Upload logo</button>
               </div>
-              <input ref={logoRef} type="file" accept="image/*" hidden onChange={(e) => { readFile(e.target.files?.[0], (s) => setBrand({ ...brand, logo: s })); e.target.value = '' }} />
+              <input ref={logoRef} type="file" accept="image/*" hidden onChange={(e) => { readFile(e.target.files?.[0], (s) => setBrand({ ...brand, logo: s }), 600); e.target.value = '' }} />
             </>
           )}
           {tab === 'uploads' && (
