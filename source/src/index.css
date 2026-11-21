@@ -89,3 +89,4 @@ h2 { font-size:18px; margin:28px 0 12px; }
 .swatches { max-width:100%; }
 .photo-preview { width:100%; height:auto; border-radius:12px; background:#e9e5dc; touch-action:none; cursor:grab; display:block; }
 .photo-preview:active { cursor:grabbing; }
+.drawer label.check { flex-direction:row; align-items:center; gap:8px; font-size:13px; color:var(--text); } .check input { width:auto; }

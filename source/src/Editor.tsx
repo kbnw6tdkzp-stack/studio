@@ -55,6 +55,40 @@ const shirtSvg = (color: string) =>
   `<path d="M160 82 Q146 140 140 206 M440 82 Q454 140 460 206 M160 82 L232 62 M440 82 L368 62" fill="none" stroke="rgba(0,0,0,.12)" stroke-width="2.5"/>` +
   `<path d="M142 482 L458 482 M62 176 L96 236 M538 176 L504 236" fill="none" stroke="rgba(0,0,0,.14)" stroke-width="2" stroke-dasharray="6 5"/>` +
   `<path d="${BODY}" fill="none" stroke="rgba(0,0,0,.22)" stroke-width="3" stroke-linejoin="round"/></g></svg>`
+// Make the flat background colour around a picture see-through (for art saved with a solid box behind it).
+// It finds the edges of the visible art, looks at the four corners of that area, and if they are all the same
+// solid colour, that colour becomes transparent with a soft edge.
+const knockOutBackground = (src: string) =>
+  new Promise<string>((resolve) => {
+    const img = new window.Image()
+    img.onload = () => {
+      const w = img.width, h = img.height
+      const c = document.createElement('canvas'); c.width = w; c.height = h
+      const ctx = c.getContext('2d', { willReadFrequently: true })!
+      ctx.drawImage(img, 0, 0)
+      const data = ctx.getImageData(0, 0, w, h)
+      const d = data.data
+      let x0 = w, y0 = h, x1 = -1, y1 = -1
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (d[(y * w + x) * 4 + 3] > 10) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+      }
+      if (x1 < 0) return resolve(src)
+      const at = (x: number, y: number) => { const i = (y * w + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]] }
+      const m = 2
+      const corners = [at(x0 + m, y0 + m), at(x1 - m, y0 + m), at(x0 + m, y1 - m), at(x1 - m, y1 - m)]
+      const key = corners[0]
+      const solid = corners.every((q) => q[3] > 240 && Math.hypot(q[0] - key[0], q[1] - key[1], q[2] - key[2]) < 24)
+      if (!solid) return resolve(src) // already see-through, or not a flat box
+      for (let i = 0; i < d.length; i += 4) {
+        const dist = Math.hypot(d[i] - key[0], d[i + 1] - key[1], d[i + 2] - key[2])
+        d[i + 3] = Math.round(d[i + 3] * Math.min(1, Math.max(0, (dist - 18) / 50)))
+      }
+      ctx.putImageData(data, 0, 0)
+      resolve(c.toDataURL('image/png'))
+    }
+    img.onerror = () => resolve(src)
+    img.src = src
+  })
 const shirtUri = (color: string) => 'data:image/svg+xml;utf8,' + encodeURIComponent(shirtSvg(color))
 const FONT_COMBOS = [
   { label: 'Add a heading', size: 120, bold: true, font: 0 },
@@ -83,6 +117,8 @@ export default function Editor() {
   const [guides, setGuides] = useState(false)
   const [mockColor, setMockColor] = useState(SHIRTS.find((c) => c.name === 'Black')!.hex)
   const [mockUrl, setMockUrl] = useState<string | null>(null)
+  const [rawArt, setRawArt] = useState<string | null>(null)
+  const [knock, setKnock] = useState(true)
   const [printIdx, setPrintIdx] = useState(0)
   const [userMocks, setUserMocks] = useState<PhotoMock[]>([])
   const [mockSel, setMockSel] = useState<string>(BUILTIN_MOCKS[0].id)
@@ -270,8 +306,20 @@ export default function Editor() {
     await wait(60)
     const st = stageRef.current
     if (!st) return
-    setMockUrl(st.toDataURL({ pixelRatio: Math.min(1, 1200 / (design.width * zoom)), mimeType: 'image/png' }))
+    // leave the page background out: the mockup should show only your art
+    const bg = st.findOne('.bg')
+    bg?.hide()
+    const url = st.toDataURL({ pixelRatio: Math.min(1, 1200 / (design.width * zoom)), mimeType: 'image/png' })
+    bg?.show()
+    setRawArt(url)
   }
+  useEffect(() => {
+    if (!rawArt) return
+    let live = true
+    if (knock) knockOutBackground(rawArt).then((u) => live && setMockUrl(u))
+    else setMockUrl(rawArt)
+    return () => { live = false }
+  }, [rawArt, knock])
   const loadImg = (src: string) => new Promise<HTMLImageElement>((res, rej) => { const i = new window.Image(); i.onload = () => res(i); i.onerror = rej; i.src = src })
   const downloadMock = async () => {
     if (!mockUrl) return
@@ -416,6 +464,7 @@ export default function Editor() {
                   {allMocks.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               </label>
+              <label className="check"><input type="checkbox" checked={knock} onChange={(e) => setKnock(e.target.checked)} /> Clear any solid box around my art</label>
               <button onClick={() => mockFileRef.current?.click()}>+ Add my own mockup photo</button>
               <input ref={mockFileRef} type="file" accept="image/*" hidden onChange={(e) => { addMockPhoto(e.target.files?.[0]); e.target.value = '' }} />
               {photoMock ? (
