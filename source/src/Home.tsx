@@ -27,7 +27,7 @@ export default function Home() {
     open({ ...buildDesign(t, brand), id: uid(), updatedAt: Date.now() })
   }
   const createBlank = (p: (typeof PRESETS)[number]) =>
-    open({ id: uid(), name: p.label, width: p.width, height: p.height, pages: [{ id: uid(), background: brand.colors[3], elements: [] }], updatedAt: Date.now() })
+    open({ id: uid(), name: p.label, width: p.width, height: p.height, pages: [{ id: uid(), background: p.transparent ? 'transparent' : brand.colors[3], elements: [] }], updatedAt: Date.now() })
 
   const auth = async (mode: 'in' | 'up') => {
     if (!supabase || !email || !password) { setMsg('Enter email and password.'); return }
@@ -76,7 +76,7 @@ export default function Home() {
           ))}
         </div>
         <div className="chips">
-          <span className="muted">Custom size:</span>
+          <span className="muted">Blank canvas:</span>
           {PRESETS.map((p) => <button key={p.id} className="chip" onClick={() => createBlank(p)}>{p.label} · {p.width}×{p.height}</button>)}
         </div>
       </section>

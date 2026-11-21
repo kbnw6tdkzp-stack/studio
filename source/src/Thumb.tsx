@@ -2,7 +2,7 @@ import type { Page } from './types'
 
 export default function Thumb({ width, height, page }: { width: number; height: number; page: Page }) {
   return (
-    <div className="thumb" style={{ background: page.background, aspectRatio: `${width}/${height}` }}>
+    <div className={page.background === 'transparent' ? 'thumb checker' : 'thumb'} style={{ background: page.background === 'transparent' ? undefined : page.background, aspectRatio: `${width}/${height}` }}>
       {page.elements.map((e) => (
         <div key={e.id} className="mini" style={{
           left: `${(e.x / width) * 100}%`, top: `${(e.y / height) * 100}%`,

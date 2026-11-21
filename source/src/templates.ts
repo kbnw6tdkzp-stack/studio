@@ -1,8 +1,13 @@
 import type { BrandKit, Design, El, Page, TextEl, ShapeEl } from './types'
 import { uid } from './store'
 
-export interface Preset { id: string; label: string; width: number; height: number }
+export interface Preset { id: string; label: string; width: number; height: number; transparent?: boolean }
 export const PRESETS: Preset[] = [
+  { id: 'tshirt', label: 'T-shirt print', width: 4500, height: 5400, transparent: true },
+  { id: 'tshirt-sm', label: 'T-shirt (phone-safe)', width: 3000, height: 3600, transparent: true },
+  { id: 'tote', label: 'Tote / pillow', width: 3600, height: 3600, transparent: true },
+  { id: 'mug', label: 'Mug wrap', width: 2700, height: 1100, transparent: true },
+  { id: 'shopify', label: 'Shopify product image', width: 2048, height: 2048 },
   { id: 'logo', label: 'Logo', width: 1000, height: 1000 },
   { id: 'card', label: 'Business card', width: 1050, height: 600 },
   { id: 'flyer', label: 'Flyer (A4)', width: 1240, height: 1754 },

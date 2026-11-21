@@ -5,17 +5,27 @@ import Canvas from './Canvas'
 import Thumb from './Thumb'
 import { useStore, uid } from './store'
 import { saveDesign } from './storage'
-import { TEMPLATES, buildDesign } from './templates'
+import { TEMPLATES, PRESETS, buildDesign } from './templates'
 import type { El, ShapeEl, TextEl } from './types'
 
-type Tab = 'design' | 'elements' | 'text' | 'brand' | 'uploads'
+type Tab = 'design' | 'elements' | 'text' | 'brand' | 'uploads' | 'mockup'
 const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: 'design', icon: '▦', label: 'Design' },
   { id: 'elements', icon: '◇', label: 'Elements' },
   { id: 'text', icon: 'T', label: 'Text' },
   { id: 'brand', icon: '❦', label: 'Brand' },
   { id: 'uploads', icon: '⇪', label: 'Uploads' },
+  { id: 'mockup', icon: '👕', label: 'Mockup' },
 ]
+
+const SHIRTS = [
+  { name: 'White', hex: '#f5f5f2' }, { name: 'Black', hex: '#1c1c1c' }, { name: 'Navy', hex: '#1f2a44' }, { name: 'Heather grey', hex: '#b9b9b4' },
+  { name: 'Sage', hex: '#a8c3a0' }, { name: 'Tan', hex: '#d2b48c' }, { name: 'Forest', hex: '#3b5a40' }, { name: 'Red', hex: '#9b2c2c' },
+]
+// Simple front-view T-shirt, drawn in a 600 x 640 box. The art sits on the chest.
+const shirtSvg = (color: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 640"><path d="M210 60 L120 90 L30 210 L100 255 L150 215 L150 590 Q150 602 162 602 L438 602 Q450 602 450 590 L450 215 L500 255 L570 210 L480 90 L390 60 Q300 120 210 60 Z" fill="${color}" stroke="rgba(0,0,0,.2)" stroke-width="3" stroke-linejoin="round"/><path d="M210 60 Q300 135 390 60 L384 52 Q300 118 216 52 Z" fill="rgba(0,0,0,.2)"/><path d="M150 215 Q160 150 120 92 M450 215 Q440 150 480 92 M150 578 L450 578" fill="none" stroke="rgba(0,0,0,.1)" stroke-width="3"/></svg>`
+const shirtUri = (color: string) => 'data:image/svg+xml;utf8,' + encodeURIComponent(shirtSvg(color))
 const FONT_COMBOS = [
   { label: 'Add a heading', size: 120, bold: true, font: 0 },
   { label: 'Add a subheading', size: 64, bold: true, font: 0 },
@@ -40,6 +50,9 @@ export default function Editor() {
   const [uploads, setUploads] = useState<string[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [menu, setMenu] = useState(false)
+  const [guides, setGuides] = useState(false)
+  const [mockColor, setMockColor] = useState(SHIRTS[1].hex)
+  const [mockUrl, setMockUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!design || !fit || !wrapRef.current) return
@@ -87,19 +100,20 @@ export default function Editor() {
   const page = design.pages[Math.min(pageIndex, design.pages.length - 1)]
   const sel = page.elements.find((e) => e.id === selectedId) as El | undefined
   const cx = design.width / 2, cy = design.height / 2
+  const k = Math.max(0.5, design.width / 1080) // new items are sized for the canvas
 
   const addText = (size: number, bold: boolean, content: string, font = 0) => {
-    const el: TextEl = { id: uid(), type: 'text', x: cx - 400, y: cy - size / 2, width: 800, height: 0, rotation: 0, opacity: 1, text: content, fontSize: size, fontFamily: brand.fonts[font] ?? brand.fonts[0], fontStyle: bold ? 'bold' : 'normal', align: 'center', fill: brand.colors[2] }
+    const el: TextEl = { id: uid(), type: 'text', x: cx - 400 * k, y: cy - (size * k) / 2, width: 800 * k, height: 0, rotation: 0, opacity: 1, text: content, fontSize: Math.round(size * k), fontFamily: brand.fonts[font] ?? brand.fonts[0], fontStyle: bold ? 'bold' : 'normal', align: 'center', fill: brand.colors[2] }
     add(el)
   }
   const addShape = (type: 'rect' | 'ellipse', o: Partial<ShapeEl> = {}) => {
-    const el: ShapeEl = { id: uid(), type, x: cx - 150, y: cy - 150, width: 300, height: 300, rotation: 0, opacity: 1, fill: brand.colors[0], stroke: brand.colors[2], strokeWidth: 0, cornerRadius: 0, ...o }
+    const el: ShapeEl = { id: uid(), type, x: cx - 150 * k, y: cy - 150 * k, width: 300 * k, height: 300 * k, rotation: 0, opacity: 1, fill: brand.colors[0], stroke: brand.colors[2], strokeWidth: 0, cornerRadius: 0, ...o }
     add(el)
   }
   const addImage = (src: string, w = 400) => {
     const i = new window.Image()
     i.onload = () => {
-      const ww = Math.min(w, design.width * 0.8), h = (i.height / i.width) * ww
+      const ww = Math.min(w * k, design.width * 0.8), h = (i.height / i.width) * ww
       add({ id: uid(), type: 'image', src, x: cx - ww / 2, y: cy - h / 2, width: ww, height: h, rotation: 0, opacity: 1 })
     }
     i.src = src
@@ -164,10 +178,36 @@ export default function Editor() {
   }
 
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+  const flatten = (png: string) =>
+    new Promise<string>((resolve) => {
+      const img = new window.Image()
+      img.onload = () => {
+        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height
+        const ctx = c.getContext('2d')!; ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0)
+        resolve(c.toDataURL('image/jpeg', 0.95))
+      }
+      img.src = png
+    })
+  // the canvas is drawn at screen zoom, so the picture can come out a pixel short; make it exactly the design size
+  const exact = (url: string, mime: 'image/png' | 'image/jpeg') =>
+    new Promise<string>((resolve) => {
+      const img = new window.Image()
+      img.onload = () => {
+        if (img.width === design.width && img.height === design.height) return resolve(url)
+        const c = document.createElement('canvas'); c.width = design.width; c.height = design.height
+        const ctx = c.getContext('2d')!
+        if (mime === 'image/jpeg') { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height) }
+        ctx.drawImage(img, 0, 0, c.width, c.height)
+        resolve(c.toDataURL(mime, 0.95))
+      }
+      img.src = url
+    })
   const render = async (mime: 'image/png' | 'image/jpeg') => {
     select(null)
     await wait(60)
-    return stageRef.current!.toDataURL({ pixelRatio: 1 / zoom, mimeType: mime, quality: 0.95 })
+    const st = stageRef.current!
+    if (mime === 'image/jpeg' && page.background === 'transparent') return exact(await flatten(st.toDataURL({ pixelRatio: 1 / zoom, mimeType: 'image/png' })), 'image/jpeg')
+    return exact(st.toDataURL({ pixelRatio: 1 / zoom, mimeType: mime, quality: 0.95 }), mime)
   }
   const download = (href: string, name: string) => { const a = document.createElement('a'); a.href = href; a.download = name; a.click() }
   const exportAs = async (kind: 'png' | 'jpg' | 'pdf') => {
@@ -190,6 +230,28 @@ export default function Editor() {
       pdf.save(base + '.pdf')
     }
   }
+
+  const refreshMock = async () => {
+    select(null)
+    await wait(60)
+    const st = stageRef.current
+    if (!st) return
+    setMockUrl(st.toDataURL({ pixelRatio: Math.min(1, 1200 / (design.width * zoom)), mimeType: 'image/png' }))
+  }
+  const loadImg = (src: string) => new Promise<HTMLImageElement>((res, rej) => { const i = new window.Image(); i.onload = () => res(i); i.onerror = rej; i.src = src })
+  const downloadMock = async () => {
+    if (!mockUrl) return
+    const [shirt, art] = await Promise.all([loadImg(shirtUri(mockColor)), loadImg(mockUrl)])
+    const c = document.createElement('canvas'); c.width = 2048; c.height = 2048
+    const ctx = c.getContext('2d')!
+    ctx.fillStyle = '#f1ede3'; ctx.fillRect(0, 0, 2048, 2048)
+    const sw = 1800, sh = 1920, sx = 124, sy = 64
+    ctx.drawImage(shirt, sx, sy, sw, sh)
+    const aw = 0.34 * sw, ah = aw * (design.height / design.width)
+    ctx.drawImage(art, sx + 0.33 * sw, sy + 0.2 * sh, aw, ah)
+    download(c.toDataURL('image/png'), (design.name.replace(/[^\w-]+/g, '_') || 'design') + '-mockup.png')
+  }
+  useEffect(() => { if (tab === 'mockup') refreshMock() }, [tab, pageIndex]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const patch = (p: Partial<El>) => sel && update(sel.id, p)
   const num = (v: string) => (Number.isFinite(parseFloat(v)) ? parseFloat(v) : 0)
@@ -247,7 +309,7 @@ export default function Editor() {
                 <button className="shape" onClick={() => addShape('rect')}><i style={{ background: brand.colors[0] }} /></button>
                 <button className="shape" onClick={() => addShape('rect', { cornerRadius: 60 })}><i style={{ background: brand.colors[0], borderRadius: 10 }} /></button>
                 <button className="shape" onClick={() => addShape('ellipse')}><i style={{ background: brand.colors[0], borderRadius: '50%' }} /></button>
-                <button className="shape" onClick={() => addShape('rect', { width: 500, height: 16, y: cy })}><i style={{ background: brand.colors[2], height: 3, width: '80%' }} /></button>
+                <button className="shape" onClick={() => addShape('rect', { width: 500 * k, height: 16 * k, y: cy })}><i style={{ background: brand.colors[2], height: 3, width: '80%' }} /></button>
                 <button className="shape" onClick={() => addShape('rect', { fill: 'transparent', strokeWidth: 8 })}><i style={{ border: `3px solid ${brand.colors[2]}` }} /></button>
                 <button className="shape" onClick={() => addShape('ellipse', { fill: 'transparent', strokeWidth: 8 })}><i style={{ border: `3px solid ${brand.colors[2]}`, borderRadius: '50%' }} /></button>
               </div>
@@ -300,6 +362,23 @@ export default function Editor() {
               <p className="muted small">Uploaded images in this session appear here. Click one to add it again.</p>
             </>
           )}
+          {tab === 'mockup' && (
+            <>
+              <h3>T-shirt mockup</h3>
+              <div className="shirt-preview">
+                <img className="shirt" src={shirtUri(mockColor)} alt="" />
+                {mockUrl && <img className="shirt-art" src={mockUrl} alt="" style={{ height: `${(design.height / design.width) * 34 * (600 / 640)}%` }} />}
+              </div>
+              <div className="swatches">
+                {SHIRTS.map((c) => <button key={c.hex} className="swatch" style={{ background: c.hex, outline: c.hex === mockColor ? '2px solid var(--accent)' : 'none' }} title={c.name} onClick={() => setMockColor(c.hex)} />)}
+              </div>
+              <div className="row">
+                <button onClick={refreshMock}>Update preview</button>
+                <button className="primary" onClick={downloadMock} disabled={!mockUrl}>Download</button>
+              </div>
+              <p className="muted small">Shows this page on the chest. Use a transparent background so only your art shows. The download is a 2048 × 2048 picture, ready for a Shopify listing.</p>
+            </>
+          )}
         </aside>
       )}
 
@@ -308,11 +387,16 @@ export default function Editor() {
           {!sel ? (
             <>
               <span className="muted small">Page {pageIndex + 1} colour</span>
-              <input type="color" value={page.background} onChange={(e) => setPage({ background: e.target.value }, false)} />
+              <input type="color" value={page.background === 'transparent' ? '#ffffff' : page.background} onChange={(e) => setPage({ background: e.target.value }, false)} />
+              <button className={page.background === 'transparent' ? 'on' : ''} title="No background, for print files" onClick={() => setPage({ background: page.background === 'transparent' ? '#ffffff' : 'transparent' })}>Transparent</button>
               <Colors onPick={(c) => setPage({ background: c })} />
               <span className="divider" />
               <label className="inline">W<input type="number" value={design.width} onChange={(e) => setDesign({ width: Math.max(100, num(e.target.value)) })} /></label>
               <label className="inline">H<input type="number" value={design.height} onChange={(e) => setDesign({ height: Math.max(100, num(e.target.value)) })} /></label>
+              <select value="" onChange={(e) => { const pr = PRESETS.find((x) => x.id === e.target.value); if (pr) { setDesign({ width: pr.width, height: pr.height }); setFit(true) } }}>
+                <option value="">Resize to…</option>
+                {PRESETS.map((pr) => <option key={pr.id} value={pr.id}>{pr.label} · {pr.width}×{pr.height}</option>)}
+              </select>
             </>
           ) : (
             <>
@@ -373,7 +457,10 @@ export default function Editor() {
         </div>
 
         <div className="stage-wrap" ref={wrapRef}>
-          <div className="stage-shadow"><Canvas stageRef={stageRef} zoom={zoom} /></div>
+          <div className={page.background === 'transparent' ? 'stage-shadow checker' : 'stage-shadow'}>
+            <Canvas stageRef={stageRef} zoom={zoom} />
+            {guides && <div className="guides"><i className="box" /><i className="gv" /><i className="gh" /></div>}
+          </div>
         </div>
 
         <div className="pages">
@@ -398,6 +485,7 @@ export default function Editor() {
 
         <footer className="bottombar">
           <span className="muted small">{design.width} × {design.height}px</span>
+          <button className={guides ? 'on' : 'ghost'} title="Show centre lines and a safe margin. They are not exported." onClick={() => setGuides((g) => !g)}>Guides</button>
           <span className="spacer" />
           <input className="slider" type="range" min={10} max={200} value={Math.round(zoom * 100)} onChange={(e) => { setFit(false); setZoom(+e.target.value / 100) }} />
           <span className="small zoomval">{Math.round(zoom * 100)}%</span>
