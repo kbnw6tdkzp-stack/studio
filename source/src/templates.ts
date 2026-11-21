@@ -1,4 +1,4 @@
-import type { BrandKit, Design, El, TextEl, ShapeEl } from './types'
+import type { BrandKit, Design, El, Page, TextEl, ShapeEl } from './types'
 import { uid } from './store'
 
 export interface Preset { id: string; label: string; width: number; height: number }
@@ -19,7 +19,16 @@ const shape = (o: Partial<ShapeEl> & { type: 'rect' | 'ellipse'; x: number; y: n
   id: uid(), rotation: 0, opacity: 1, fill: '#6d28d9', stroke: '#000000', strokeWidth: 0, cornerRadius: 0, ...o,
 })
 
-export interface Template { id: string; label: string; preset: string; build: (b: BrandKit) => Omit<Design, 'id' | 'updatedAt'> }
+type OnePage = { name: string; width: number; height: number; background: string; elements: El[] }
+export interface Template { id: string; label: string; preset: string; build: (b: BrandKit) => OnePage; deck?: (b: BrandKit) => Page[] }
+
+/** Turn a template into a design (with its pages). */
+export function buildDesign(t: Template, b: BrandKit): Omit<Design, 'id' | 'updatedAt'> {
+  const one = t.build(b)
+  const pages: Page[] = t.deck ? t.deck(b) : [{ id: uid(), background: one.background, elements: one.elements }]
+  return { name: one.name, width: one.width, height: one.height, pages }
+}
+
 
 const [c1, c2, c3, c4] = [0, 1, 2, 3]
 const col = (b: BrandKit, i: number) => b.colors[i % b.colors.length]
@@ -92,5 +101,31 @@ export const TEMPLATES: Template[] = [
         text({ text: b.tagline, x: 80, y: 290, width: 1000, fontSize: 40, fill: col(b, c2), fontFamily: b.fonts[0] }),
       ] as El[],
     }),
+  },
+  {
+    id: 'deck', label: 'Presentation (3 pages)', preset: 'banner',
+    build: (b) => ({
+      name: `${b.name} deck`, width: 1920, height: 1080, background: col(b, c3),
+      elements: [
+        text({ text: b.name, x: 160, y: 380, width: 1200, fontSize: 200, fontStyle: 'bold', fill: col(b, c4), fontFamily: b.fonts[0] }),
+        text({ text: b.tagline, x: 160, y: 640, width: 1200, fontSize: 64, fill: col(b, c2), fontFamily: b.fonts[0] }),
+        shape({ type: 'ellipse', x: 1380, y: 300, width: 480, height: 480, fill: col(b, c1) }),
+      ] as El[],
+    }),
+    deck: (b) => [
+      { id: uid(), background: col(b, c3), elements: [
+        text({ text: b.name, x: 160, y: 380, width: 1200, fontSize: 200, fontStyle: 'bold', fill: col(b, c4), fontFamily: b.fonts[0] }),
+        text({ text: b.tagline, x: 160, y: 640, width: 1200, fontSize: 64, fill: col(b, c2), fontFamily: b.fonts[0] }),
+        shape({ type: 'ellipse', x: 1380, y: 300, width: 480, height: 480, fill: col(b, c1) }),
+      ] as El[] },
+      { id: uid(), background: col(b, c4), elements: [
+        shape({ type: 'rect', x: 0, y: 0, width: 40, height: 1080, fill: col(b, c1) }),
+        text({ text: 'Our story', x: 160, y: 140, width: 1600, fontSize: 120, fontStyle: 'bold', fill: col(b, c3), fontFamily: b.fonts[0] }),
+        text({ text: 'Write the key idea here in one or two sentences. Keep it short and clear.', x: 160, y: 360, width: 1100, fontSize: 56, fill: col(b, c3), fontFamily: b.fonts[0] }),
+      ] as El[] },
+      { id: uid(), background: col(b, c1), elements: [
+        text({ text: 'Thank you', x: 160, y: 420, width: 1600, fontSize: 220, fontStyle: 'bold', align: 'center', fill: col(b, c4), fontFamily: b.fonts[0] }),
+      ] as El[] },
+    ],
   },
 ]

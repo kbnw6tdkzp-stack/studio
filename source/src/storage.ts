@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Design } from './types'
+import { normalize } from './store'
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
@@ -34,26 +35,26 @@ function dataUrlToBlob(u: string): Blob {
 
 // Move any embedded pictures into storage and swap in their links, so the saved design stays tiny.
 async function moveImagesToStorage(d: Design, uid: string): Promise<Design> {
-  const els = await Promise.all(
-    d.elements.map(async (e) => {
-      const patch = async (src: string | undefined) => {
-        if (!src || !src.startsWith('data:')) return src
-        const hit = uploaded.get(src)
-        if (hit) return hit
-        const blob = dataUrlToBlob(src)
-        const ext = blob.type.split('/')[1]?.split('+')[0] || 'png'
-        const path = `${uid}/${crypto.randomUUID()}.${ext}`
-        const { error } = await supabase!.storage.from(BUCKET).upload(path, blob, { contentType: blob.type })
-        if (error) throw error
-        const url = supabase!.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
-        uploaded.set(src, url)
-        return url
-      }
-      if (e.type !== 'image') return e
-      return { ...e, src: (await patch(e.src))!, original: await patch(e.original) }
-    }),
+  const move = async (src: string | undefined) => {
+    if (!src || !src.startsWith('data:')) return src
+    const hit = uploaded.get(src)
+    if (hit) return hit
+    const blob = dataUrlToBlob(src)
+    const ext = blob.type.split('/')[1]?.split('+')[0] || 'png'
+    const path = `${uid}/${crypto.randomUUID()}.${ext}`
+    const { error } = await supabase!.storage.from(BUCKET).upload(path, blob, { contentType: blob.type })
+    if (error) throw error
+    const url = supabase!.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+    uploaded.set(src, url)
+    return url
+  }
+  const pages = await Promise.all(
+    d.pages.map(async (pg) => ({
+      ...pg,
+      elements: await Promise.all(pg.elements.map(async (e) => (e.type === 'image' ? { ...e, src: (await move(e.src))!, original: await move(e.original) } : e))),
+    })),
   )
-  return { ...d, elements: els }
+  return { ...d, pages }
 }
 
 export async function listDesigns(): Promise<Design[]> {
@@ -62,7 +63,7 @@ export async function listDesigns(): Promise<Design[]> {
     const { data } = await supabase.from('designs').select('id,name,updated_at,w:data->width,h:data->height').order('updated_at', { ascending: false })
     if (data) {
       return data.map((r) => ({
-        id: r.id as string, name: r.name as string, width: Number(r.w) || 0, height: Number(r.h) || 0, background: '#ffffff', elements: [], updatedAt: new Date(r.updated_at as string).getTime(),
+        id: r.id as string, name: r.name as string, width: Number(r.w) || 0, height: Number(r.h) || 0, pages: [], updatedAt: new Date(r.updated_at as string).getTime(),
       }))
     }
   }
@@ -77,7 +78,8 @@ export async function getDesign(id: string): Promise<Design | null> {
   return readLocal().find((x) => x.id === id) ?? null
 }
 
-export async function saveDesign(d: Design) {
+export async function saveDesign(input: Design) {
+  const d = normalize(input)
   const uid = supabase ? await userId() : null
   let toSave = d
   if (uid) {

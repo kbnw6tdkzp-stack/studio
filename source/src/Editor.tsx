@@ -5,7 +5,7 @@ import Canvas from './Canvas'
 import Thumb from './Thumb'
 import { useStore, uid } from './store'
 import { saveDesign } from './storage'
-import { TEMPLATES } from './templates'
+import { TEMPLATES, buildDesign } from './templates'
 import type { El, ShapeEl, TextEl } from './types'
 
 type Tab = 'design' | 'elements' | 'text' | 'brand' | 'uploads'
@@ -26,7 +26,7 @@ const FONT_COMBOS = [
 ]
 
 export default function Editor() {
-  const { design, selectedId, brand, add, update, remove, duplicate, reorder, undo, redo, setDesign, setBrand, close, select } = useStore()
+  const { design, pageIndex, selectedId, brand, add, update, remove, duplicate, reorder, undo, redo, setDesign, setPage, replaceAll, setBrand, close, select, selectPage, addPage, duplicatePage, removePage, movePage } = useStore()
   const past = useStore((s) => s.past.length)
   const future = useStore((s) => s.future.length)
   const stageRef = useRef<Konva.Stage | null>(null)
@@ -36,21 +36,23 @@ export default function Editor() {
   const [zoom, setZoom] = useState(0.5)
   const [fit, setFit] = useState(true)
   const [saved, setSaved] = useState(true)
-  const [tab, setTab] = useState<Tab | null>('design')
+  const [tab, setTab] = useState<Tab | null>(() => (window.innerWidth < 800 ? null : 'design'))
   const [uploads, setUploads] = useState<string[]>([])
   const [busy, setBusy] = useState<string | null>(null)
+  const [menu, setMenu] = useState(false)
 
   useEffect(() => {
     if (!design || !fit || !wrapRef.current) return
     const calc = () => {
       const r = wrapRef.current!.getBoundingClientRect()
-      setZoom(Math.max(0.05, Math.min((r.width - 80) / design.width, (r.height - 80) / design.height, 1)))
+      const pad = window.innerWidth < 800 ? 32 : 80
+      setZoom(Math.max(0.05, Math.min((r.width - pad) / design.width, (r.height - pad) / design.height, 1)))
     }
     calc()
     const ro = new ResizeObserver(calc)
     ro.observe(wrapRef.current)
     return () => ro.disconnect()
-  }, [design?.width, design?.height, fit, tab])
+  }, [design?.width, design?.height, fit, tab, design?.pages.length])
 
   useEffect(() => {
     if (!design) return
@@ -71,7 +73,7 @@ export default function Editor() {
       else if (e.key === 'Delete' || e.key === 'Backspace') { if (id) remove(id) }
       else if (id && e.key.startsWith('Arrow')) {
         e.preventDefault()
-        const el = useStore.getState().design?.elements.find((x) => x.id === id)
+        const st = useStore.getState(); const el = st.design?.pages[st.pageIndex]?.elements.find((x) => x.id === id)
         if (!el) return
         const s = e.shiftKey ? 10 : 1
         update(id, { x: el.x + (e.key === 'ArrowRight' ? s : e.key === 'ArrowLeft' ? -s : 0), y: el.y + (e.key === 'ArrowDown' ? s : e.key === 'ArrowUp' ? -s : 0) })
@@ -82,7 +84,8 @@ export default function Editor() {
   }, [undo, redo, remove, duplicate, update])
 
   if (!design) return null
-  const sel = design.elements.find((e) => e.id === selectedId) as El | undefined
+  const page = design.pages[Math.min(pageIndex, design.pages.length - 1)]
+  const sel = page.elements.find((e) => e.id === selectedId) as El | undefined
   const cx = design.width / 2, cy = design.height / 2
 
   const addText = (size: number, bold: boolean, content: string, font = 0) => {
@@ -140,26 +143,50 @@ export default function Editor() {
   }
   const applyTemplate = (id: string) => {
     const t = TEMPLATES.find((x) => x.id === id)!
-    if (design.elements.length && !confirm('Replace the current design with this template?')) return
-    const d = t.build(brand)
-    setDesign({ width: d.width, height: d.height, background: d.background, elements: d.elements })
+    const hasContent = design.pages.some((p) => p.elements.length)
+    if (hasContent && !confirm('Replace the current design with this template?')) return
+    const d = buildDesign(t, brand)
+    replaceAll({ width: d.width, height: d.height, pages: d.pages })
     setFit(true)
   }
+  const alignSel = (k: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => {
+    const n = stageRef.current?.findOne('#' + (sel?.id ?? ''))
+    if (!n || !sel) return
+    const r = n.getClientRect(), W = design.width * zoom, H = design.height * zoom
+    let dx = 0, dy = 0
+    if (k === 'left') dx = -r.x
+    if (k === 'center') dx = W / 2 - (r.x + r.width / 2)
+    if (k === 'right') dx = W - (r.x + r.width)
+    if (k === 'top') dy = -r.y
+    if (k === 'middle') dy = H / 2 - (r.y + r.height / 2)
+    if (k === 'bottom') dy = H - (r.y + r.height)
+    update(sel.id, { x: sel.x + dx / zoom, y: sel.y + dy / zoom })
+  }
 
-  const render = (mime: 'image/png' | 'image/jpeg') => {
-    const st = stageRef.current!
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+  const render = async (mime: 'image/png' | 'image/jpeg') => {
     select(null)
-    return new Promise<string>((res) => setTimeout(() => res(st.toDataURL({ pixelRatio: 1 / zoom, mimeType: mime, quality: 0.95 })), 50))
+    await wait(60)
+    return stageRef.current!.toDataURL({ pixelRatio: 1 / zoom, mimeType: mime, quality: 0.95 })
   }
   const download = (href: string, name: string) => { const a = document.createElement('a'); a.href = href; a.download = name; a.click() }
   const exportAs = async (kind: 'png' | 'jpg' | 'pdf') => {
+    setMenu(false)
     const base = design.name.replace(/[^\w-]+/g, '_') || 'design'
-    if (kind === 'png') download(await render('image/png'), base + '.png')
-    else if (kind === 'jpg') download(await render('image/jpeg'), base + '.jpg')
+    if (kind === 'png') download(await render('image/png'), base + (design.pages.length > 1 ? `-page${pageIndex + 1}` : '') + '.png')
+    else if (kind === 'jpg') download(await render('image/jpeg'), base + (design.pages.length > 1 ? `-page${pageIndex + 1}` : '') + '.jpg')
     else {
-      const url = await render('image/jpeg')
+      const start = pageIndex
+      setBusy('Making your PDF…')
       const pdf = new jsPDF({ orientation: design.width >= design.height ? 'l' : 'p', unit: 'px', format: [design.width, design.height] })
-      pdf.addImage(url, 'JPEG', 0, 0, design.width, design.height)
+      for (let i = 0; i < design.pages.length; i++) {
+        selectPage(i)
+        await wait(250)
+        if (i > 0) pdf.addPage([design.width, design.height], design.width >= design.height ? 'l' : 'p')
+        pdf.addImage(await render('image/jpeg'), 'JPEG', 0, 0, design.width, design.height)
+      }
+      selectPage(start)
+      setBusy(null)
       pdf.save(base + '.pdf')
     }
   }
@@ -175,17 +202,19 @@ export default function Editor() {
       <header className="topbar">
         <button className="ghost" onClick={() => { saveDesign(design); close() }}>← Home</button>
         <input className="title" value={design.name} onChange={(e) => setDesign({ name: e.target.value }, false)} />
-        <span className="muted small">{saved ? 'All changes saved' : 'Saving…'}</span>
+        <span className="muted small save-status">{saved ? 'All changes saved' : 'Saving…'}</span>
         <span className="spacer" />
         <button className="ghost" disabled={!past} onClick={undo} title="Undo">↶ Undo</button>
         <button className="ghost" disabled={!future} onClick={redo} title="Redo">↷ Redo</button>
         <div className="menu">
-          <button className="primary">Share / Download ▾</button>
-          <div className="menu-list">
-            <button onClick={() => exportAs('png')}>PNG</button>
-            <button onClick={() => exportAs('jpg')}>JPG</button>
-            <button onClick={() => exportAs('pdf')}>PDF</button>
-          </div>
+          <button className="primary" onClick={() => setMenu((m) => !m)}><span className="long">Share / Download</span><span className="short">Export</span> ▾</button>
+          {menu && (
+            <div className="menu-list">
+              <button onClick={() => exportAs('png')}>PNG{design.pages.length > 1 ? ' (this page)' : ''}</button>
+              <button onClick={() => exportAs('jpg')}>JPG{design.pages.length > 1 ? ' (this page)' : ''}</button>
+              <button onClick={() => exportAs('pdf')}>PDF{design.pages.length > 1 ? ' (all pages)' : ''}</button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -205,7 +234,7 @@ export default function Editor() {
               <div className="tpl-grid">
                 {TEMPLATES.map((t) => (
                   <button key={t.id} className="card" onClick={() => applyTemplate(t.id)}>
-                    <Thumb d={t.build(brand)} /><span className="small">{t.label}</span>
+                    <TplThumb t={t} /><span className="small">{t.label}</span>
                   </button>
                 ))}
               </div>
@@ -278,9 +307,9 @@ export default function Editor() {
         <div className="ctx">
           {!sel ? (
             <>
-              <span className="muted small">Page</span>
-              <input type="color" value={design.background} onChange={(e) => setDesign({ background: e.target.value }, false)} />
-              <Colors onPick={(c) => setDesign({ background: c })} />
+              <span className="muted small">Page {pageIndex + 1} colour</span>
+              <input type="color" value={page.background} onChange={(e) => setPage({ background: e.target.value }, false)} />
+              <Colors onPick={(c) => setPage({ background: c })} />
               <span className="divider" />
               <label className="inline">W<input type="number" value={design.width} onChange={(e) => setDesign({ width: Math.max(100, num(e.target.value)) })} /></label>
               <label className="inline">H<input type="number" value={design.height} onChange={(e) => setDesign({ height: Math.max(100, num(e.target.value)) })} /></label>
@@ -331,6 +360,10 @@ export default function Editor() {
               <span className="muted small">Rotate</span>
               <input className="num" type="number" value={Math.round(sel.rotation)} onChange={(e) => patch({ rotation: num(e.target.value) })} />
               <span className="divider" />
+              {(['left', 'center', 'right', 'top', 'middle', 'bottom'] as const).map((k) => (
+                <button key={k} title={`Align ${k} on page`} onClick={() => alignSel(k)}>{{ left: '⇤', center: '↔', right: '⇥', top: '⤒', middle: '↕', bottom: '⤓' }[k]}</button>
+              ))}
+              <span className="divider" />
               <button title="Bring forward" onClick={() => reorder(sel.id, 'up')}>⬆</button>
               <button title="Send backward" onClick={() => reorder(sel.id, 'down')}>⬇</button>
               <button title="Duplicate (Ctrl+D)" onClick={() => duplicate(sel.id)}>⧉</button>
@@ -341,6 +374,26 @@ export default function Editor() {
 
         <div className="stage-wrap" ref={wrapRef}>
           <div className="stage-shadow"><Canvas stageRef={stageRef} zoom={zoom} /></div>
+        </div>
+
+        <div className="pages">
+          {design.pages.map((p, i) => (
+            <div key={p.id} className={i === pageIndex ? 'pg on' : 'pg'}>
+              <button className="pg-thumb" onClick={() => selectPage(i)} aria-label={`Page ${i + 1}`}><Thumb width={design.width} height={design.height} page={p} /></button>
+              <div className="pg-row">
+                <span className="small">{i + 1}</span>
+                {i === pageIndex && (
+                  <>
+                    <button className="ghost" title="Move earlier" disabled={i === 0} onClick={() => movePage(i, -1)}>‹</button>
+                    <button className="ghost" title="Move later" disabled={i === design.pages.length - 1} onClick={() => movePage(i, 1)}>›</button>
+                    <button className="ghost" title="Duplicate page" onClick={() => duplicatePage(i)}>⧉</button>
+                    <button className="ghost danger" title="Delete page" disabled={design.pages.length < 2} onClick={() => removePage(i)}>🗑</button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+          <button className="pg-add" onClick={addPage}>+ Add page</button>
         </div>
 
         <footer className="bottombar">
@@ -354,4 +407,10 @@ export default function Editor() {
       {busy && <div className="busy"><div className="busy-box"><div className="spinner" />{busy}</div></div>}
     </div>
   )
+}
+
+function TplThumb({ t }: { t: (typeof TEMPLATES)[number] }) {
+  const brand = useStore((s) => s.brand)
+  const d = buildDesign(t, brand)
+  return <Thumb width={d.width} height={d.height} page={d.pages[0]} />
 }

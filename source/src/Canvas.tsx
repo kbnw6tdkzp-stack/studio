@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Stage, Layer, Rect, Ellipse, Text, Image as KImage, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { useStore } from './store'
-import type { El, ImageEl } from './types'
+import type { El, ImageEl, TextEl } from './types'
 
 const SNAP = 8 // screen pixels
 
@@ -32,10 +32,12 @@ function ImageNode(props: { el: ImageEl; common: Record<string, unknown> }) {
 }
 
 export default function Canvas({ stageRef, zoom }: { stageRef: React.RefObject<Konva.Stage | null>; zoom: number }) {
-  const { design, selectedId, select, update } = useStore()
+  const { design, pageIndex, selectedId, select, update } = useStore()
   const trRef = useRef<Konva.Transformer>(null)
   const layerRef = useRef<Konva.Layer>(null)
   const guideRef = useRef<Konva.Layer>(null)
+  const editRef = useRef<((n: Konva.Node, el: TextEl) => void) | null>(null)
+  const page = design?.pages[Math.min(pageIndex, (design?.pages.length ?? 1) - 1)]
 
   useEffect(() => {
     const tr = trRef.current
@@ -44,12 +46,49 @@ export default function Canvas({ stageRef, zoom }: { stageRef: React.RefObject<K
     const node = selectedId ? layer.findOne('#' + selectedId) : null
     tr.nodes(node ? [node] : [])
     tr.getLayer()?.batchDraw()
-  }, [selectedId, design?.elements])
+  }, [selectedId, page?.elements, pageIndex])
 
-  if (!design) return null
+  // double-click / double-tap on a text element starts typing. Listen to the browser's own
+  // pointer events: the selection handles swallow the second press before Konva sees it.
+  useEffect(() => {
+    const c = stageRef.current?.container()
+    if (!c) return
+    let last: { t: number; x: number; y: number } | null = null
+    const h = (ev: PointerEvent) => {
+      const r = c.getBoundingClientRect()
+      const x = ev.clientX - r.left, y = ev.clientY - r.top, now = Date.now()
+      if (last && now - last.t < 450 && Math.hypot(x - last.x, y - last.y) < 12) {
+        last = null
+        const s = useStore.getState()
+        const el = s.design?.pages[s.pageIndex]?.elements.find((e) => e.id === s.selectedId)
+        const node = el ? layerRef.current?.findOne('#' + el.id) : null
+        if (el && el.type === 'text' && node) setTimeout(() => editRef.current?.(node, el), 80)
+      } else last = { t: now, x, y }
+    }
+    c.addEventListener('pointerdown', h)
+    return () => c.removeEventListener('pointerdown', h)
+  }, [design?.id, pageIndex])
+
+  if (!design || !page) return null
 
   const Wz = design.width * zoom, Hz = design.height * zoom
-  const tx = [0, Wz / 2, Wz], ty = [0, Hz / 2, Hz]
+
+  // snap targets: canvas edges and centre, plus edges and centres of the other elements
+  const targets = (skipId: string | null) => {
+    const tx = [0, Wz / 2, Wz], ty = [0, Hz / 2, Hz]
+    const layer = layerRef.current
+    if (layer) {
+      for (const e of page.elements) {
+        if (e.id === skipId) continue
+        const n = layer.findOne('#' + e.id)
+        if (!n) continue
+        const r = n.getClientRect()
+        tx.push(r.x, r.x + r.width / 2, r.x + r.width)
+        ty.push(r.y, r.y + r.height / 2, r.y + r.height)
+      }
+    }
+    return { tx, ty }
+  }
 
   const drawGuides = (vs: number[], hs: number[]) => {
     const g = guideRef.current
@@ -61,9 +100,9 @@ export default function Canvas({ stageRef, zoom }: { stageRef: React.RefObject<K
     g.batchDraw()
   }
 
-  // snap a dragged element's edges and centre to the canvas edges and centre lines
   const onDragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
     const n = e.target
+    const { tx, ty } = targets(n.id())
     const b = n.getClientRect()
     const bx = nearest([b.x, b.x + b.width / 2, b.x + b.width], tx)
     const by = nearest([b.y, b.y + b.height / 2, b.y + b.height], ty)
@@ -72,10 +111,10 @@ export default function Canvas({ stageRef, zoom }: { stageRef: React.RefObject<K
     drawGuides(bx ? [bx.t] : [], by ? [by.t] : [])
   }
 
-  // snap the edges being resized to the canvas edges and centre lines
   const boundBox = (o: { x: number; y: number; width: number; height: number; rotation: number }, n: typeof o) => {
     if (n.width < 10 || n.height < 10) return o
     if (Math.abs(n.rotation) > 0.001) return n
+    const { tx, ty } = targets(selectedId)
     let { x, y, width, height } = n
     const vs: number[] = [], hs: number[] = []
     if (Math.abs(n.x - o.x) > 0.01) {
@@ -97,6 +136,42 @@ export default function Canvas({ stageRef, zoom }: { stageRef: React.RefObject<K
     drawGuides(vs, hs)
     return { ...n, x, y, width: Math.max(10, width), height: Math.max(10, height) }
   }
+
+  // type directly on the canvas: a text box appears over the element
+  const editText = (node: Konva.Node, el: TextEl) => {
+    const stage = stageRef.current
+    if (!stage) return
+    const box = stage.container().getBoundingClientRect()
+    const abs = node.absolutePosition()
+    const ta = document.createElement('textarea')
+    ta.value = el.text
+    Object.assign(ta.style, {
+      position: 'fixed', left: `${box.left + abs.x}px`, top: `${box.top + abs.y}px`, width: `${el.width * zoom}px`,
+      fontSize: `${el.fontSize * zoom}px`, lineHeight: '1', fontFamily: el.fontFamily,
+      fontWeight: el.fontStyle.includes('bold') ? '700' : '400', fontStyle: el.fontStyle.includes('italic') ? 'italic' : 'normal',
+      textAlign: el.align, color: el.fill, background: 'transparent', border: '1px dashed #5f7f62', padding: '0', margin: '0',
+      overflow: 'hidden', resize: 'none', outline: 'none', transformOrigin: 'left top', transform: `rotate(${el.rotation}deg)`, zIndex: '300',
+    })
+    document.body.appendChild(ta)
+    const fit = () => { ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight}px` }
+    fit()
+    node.hide(); trRef.current?.hide(); layerRef.current?.batchDraw()
+    let done = false
+    const finish = () => {
+      if (done) return
+      done = true
+      const value = ta.value
+      ta.remove()
+      node.show(); trRef.current?.show(); layerRef.current?.batchDraw()
+      if (value !== el.text) update(el.id, { text: value })
+    }
+    ta.addEventListener('input', fit)
+    ta.addEventListener('blur', finish)
+    ta.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') finish() })
+    ta.focus(); ta.select()
+  }
+
+  editRef.current = editText
 
   const common = (el: El) => ({
     id: el.id,
@@ -126,10 +201,11 @@ export default function Canvas({ stageRef, zoom }: { stageRef: React.RefObject<K
       scaleX={zoom}
       scaleY={zoom}
       onMouseDown={(e) => { if (e.target === e.target.getStage() || e.target.name() === 'bg') select(null) }}
+      onTouchStart={(e) => { if (e.target === e.target.getStage() || e.target.name() === 'bg') select(null) }}
     >
       <Layer ref={layerRef}>
-        <Rect name="bg" x={0} y={0} width={design.width} height={design.height} fill={design.background} />
-        {design.elements.map((el) => {
+        <Rect name="bg" x={0} y={0} width={design.width} height={design.height} fill={page.background} />
+        {page.elements.map((el) => {
           const c = common(el)
           if (el.type === 'rect')
             return <Rect key={el.id} {...c} width={el.width} height={el.height} fill={el.fill} stroke={el.stroke} strokeWidth={el.strokeWidth} cornerRadius={el.cornerRadius} />

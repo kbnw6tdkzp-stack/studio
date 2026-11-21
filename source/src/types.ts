@@ -33,14 +33,22 @@ export interface ImageEl extends BaseEl {
 }
 export type El = TextEl | ShapeEl | ImageEl
 
+export interface Page {
+  id: string
+  background: string
+  elements: El[]
+}
+
 export interface Design {
   id: string
   name: string
   width: number
   height: number
-  background: string
-  elements: El[]
+  pages: Page[]
   updatedAt: number
+  // older designs stored a single page directly; they are converted when opened
+  background?: string
+  elements?: El[]
 }
 
 export interface BrandKit {

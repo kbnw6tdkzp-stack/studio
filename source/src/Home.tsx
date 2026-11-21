@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore, uid } from './store'
-import { PRESETS, TEMPLATES } from './templates'
+import { PRESETS, TEMPLATES, buildDesign } from './templates'
 import { deleteDesign, getDesign, listDesigns, cloudEnabled, supabase } from './storage'
 import type { Design } from './types'
 import Thumb from './Thumb'
@@ -24,10 +24,10 @@ export default function Home() {
 
   const create = (tplId: string) => {
     const t = TEMPLATES.find((x) => x.id === tplId)!
-    open({ ...t.build(brand), id: uid(), updatedAt: Date.now() })
+    open({ ...buildDesign(t, brand), id: uid(), updatedAt: Date.now() })
   }
   const createBlank = (p: (typeof PRESETS)[number]) =>
-    open({ id: uid(), name: p.label, width: p.width, height: p.height, background: brand.colors[3], elements: [], updatedAt: Date.now() })
+    open({ id: uid(), name: p.label, width: p.width, height: p.height, pages: [{ id: uid(), background: brand.colors[3], elements: [] }], updatedAt: Date.now() })
 
   const auth = async (mode: 'in' | 'up') => {
     if (!supabase || !email || !password) { setMsg('Enter email and password.'); return }
@@ -70,7 +70,7 @@ export default function Home() {
         <div className="grid">
           {TEMPLATES.map((t) => (
             <button key={t.id} className="card" onClick={() => create(t.id)}>
-              <Thumb d={t.build(brand)} />
+              <HomeThumb t={t} brand={brand} />
               <span>{t.label}</span>
             </button>
           ))}
@@ -97,4 +97,9 @@ export default function Home() {
       </section>
     </div>
   )
+}
+
+function HomeThumb({ t, brand }: { t: (typeof TEMPLATES)[number]; brand: Parameters<typeof buildDesign>[1] }) {
+  const d = buildDesign(t, brand)
+  return <Thumb width={d.width} height={d.height} page={d.pages[0]} />
 }
