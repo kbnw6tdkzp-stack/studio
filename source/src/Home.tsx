@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore, uid } from './store'
 import { PRESETS, TEMPLATES } from './templates'
-import { deleteDesign, listDesigns, cloudEnabled, supabase } from './storage'
+import { deleteDesign, getDesign, listDesigns, cloudEnabled, supabase } from './storage'
 import type { Design } from './types'
 import Thumb from './Thumb'
 
@@ -87,7 +87,7 @@ export default function Home() {
         <div className="list">
           {designs.map((d) => (
             <div key={d.id} className="row-item">
-              <button className="linklike" onClick={() => open(d)}>{d.name}</button>
+              <button className="linklike" onClick={async () => { const full = await getDesign(d.id); if (full) open(full) }}>{d.name}</button>
               <span className="muted small">{d.width}×{d.height} · {new Date(d.updatedAt).toLocaleString()}</span>
               <span className="spacer" />
               <button className="ghost danger" onClick={() => { if (confirm(`Delete "${d.name}"?`)) deleteDesign(d.id).then(refresh) }}>Delete</button>
