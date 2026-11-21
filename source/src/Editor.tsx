@@ -6,6 +6,8 @@ import Thumb from './Thumb'
 import { useStore, uid } from './store'
 import { saveDesign } from './storage'
 import { TEMPLATES, PRESETS, buildDesign } from './templates'
+import PhotoMockup from './PhotoMockup'
+import { BUILTIN_MOCKS, listUserMocks, saveUserMock, deleteUserMock, loadPlace, type PhotoMock } from './mockups'
 import type { El, ShapeEl, TextEl } from './types'
 
 type Tab = 'design' | 'elements' | 'text' | 'brand' | 'uploads' | 'mockup'
@@ -82,6 +84,9 @@ export default function Editor() {
   const [mockColor, setMockColor] = useState(SHIRTS.find((c) => c.name === 'Black')!.hex)
   const [mockUrl, setMockUrl] = useState<string | null>(null)
   const [printIdx, setPrintIdx] = useState(0)
+  const [userMocks, setUserMocks] = useState<PhotoMock[]>([])
+  const [mockSel, setMockSel] = useState<string>(BUILTIN_MOCKS[0].id)
+  const mockFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!design || !fit || !wrapRef.current) return
@@ -281,6 +286,16 @@ export default function Editor() {
     ctx.drawImage(art, sx + pr.cx * u - aw / 2, sy + pr.top * u, aw, ah)
     download(c.toDataURL('image/png'), (design.name.replace(/[^\w-]+/g, '_') || 'design') + '-mockup.png')
   }
+  useEffect(() => { listUserMocks().then(setUserMocks) }, [])
+  const allMocks: PhotoMock[] = [...BUILTIN_MOCKS.map((m) => ({ ...m, place: loadPlace(m) })), ...userMocks]
+  const photoMock = allMocks.find((m) => m.id === mockSel)
+  const addMockPhoto = (f: File | undefined) => {
+    if (!f) return
+    readFile(f, (src) => {
+      const m: PhotoMock = { id: 'u' + uid(), name: f.name.replace(/\.[^.]+$/, '') || 'My mockup', src, place: { cx: 0.5, top: 0.3, width: 0.3 } }
+      saveUserMock(m).then(() => { setUserMocks((u) => [...u, m]); setMockSel(m.id) })
+    }, 2000)
+  }
   useEffect(() => { if (tab === 'mockup') refreshMock() }, [tab, pageIndex]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const patch = (p: Partial<El>) => sel && update(sel.id, p)
@@ -394,7 +409,24 @@ export default function Editor() {
           )}
           {tab === 'mockup' && (
             <>
-              <h3>Comfort Colors 1717 mockup</h3>
+              <h3>Mockup</h3>
+              <label>Style
+                <select value={mockSel} onChange={(e) => setMockSel(e.target.value)}>
+                  <option value="drawn">Drawn Comfort Colors 1717 · pick any colour</option>
+                  {allMocks.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </label>
+              <button onClick={() => mockFileRef.current?.click()}>+ Add my own mockup photo</button>
+              <input ref={mockFileRef} type="file" accept="image/*" hidden onChange={(e) => { addMockPhoto(e.target.files?.[0]); e.target.value = '' }} />
+              {photoMock ? (
+                <>
+                  <PhotoMockup key={photoMock.id} mock={photoMock} art={mockUrl} aspect={design.height / design.width} filename={design.name.replace(/[^\w-]+/g, '_') || 'design'}
+                    onDelete={photoMock.builtin ? undefined : () => { deleteUserMock(photoMock.id); setUserMocks((u) => u.filter((x) => x.id !== photoMock.id)); setMockSel('drawn') }} />
+                  <div className="row"><button onClick={refreshMock}>Update art from page</button></div>
+                  <p className="muted small">Use a transparent background so only your art shows. For your own photos, use a flat shirt photo with plain fabric where the print goes.</p>
+                </>
+              ) : (
+                <>
               <div className="shirt-preview">
                 <img className="shirt" src={shirtUri(mockColor)} alt="" />
                 {mockUrl && (() => {
@@ -416,6 +448,8 @@ export default function Editor() {
                 <button className="primary" onClick={downloadMock} disabled={!mockUrl}>Download</button>
               </div>
               <p className="muted small">The print size is the width of your whole canvas, so trim empty space around the art. Use a transparent background. The download is 2048 × 2048, ready for a Shopify listing. Shirt colours are close matches, not exact.</p>
+                </>
+              )}
             </>
           )}
         </aside>

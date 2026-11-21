@@ -87,3 +87,5 @@ h2 { font-size:18px; margin:28px 0 12px; }
 .shirt-preview .shirt-art, .shirt-preview .shirt { user-select:none; -webkit-user-drag:none; }
 .shirt-preview .shirt-art { left:auto; top:auto; }
 .swatches { max-width:100%; }
+.photo-preview { width:100%; height:auto; border-radius:12px; background:#e9e5dc; touch-action:none; cursor:grab; display:block; }
+.photo-preview:active { cursor:grabbing; }
