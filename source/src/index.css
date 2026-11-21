@@ -85,3 +85,5 @@ h2 { font-size:18px; margin:28px 0 12px; }
 .shirt-preview .shirt { position:absolute; inset:0; width:100%; height:100%; }
 .shirt-preview .shirt-art { position:absolute; left:33%; top:20%; width:34%; height:auto; }
 .shirt-preview .shirt-art, .shirt-preview .shirt { user-select:none; -webkit-user-drag:none; }
+.shirt-preview .shirt-art { left:auto; top:auto; }
+.swatches { max-width:100%; }

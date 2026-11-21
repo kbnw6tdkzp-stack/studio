@@ -18,13 +18,41 @@ const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: 'mockup', icon: '👕', label: 'Mockup' },
 ]
 
+// Comfort Colors 1717 colours (approximate shades, matched by eye; edit the hex values to match your colour chart exactly)
 const SHIRTS = [
-  { name: 'White', hex: '#f5f5f2' }, { name: 'Black', hex: '#1c1c1c' }, { name: 'Navy', hex: '#1f2a44' }, { name: 'Heather grey', hex: '#b9b9b4' },
-  { name: 'Sage', hex: '#a8c3a0' }, { name: 'Tan', hex: '#d2b48c' }, { name: 'Forest', hex: '#3b5a40' }, { name: 'Red', hex: '#9b2c2c' },
+  { name: 'White', hex: '#f4f4f1' }, { name: 'Ivory', hex: '#efe8d2' }, { name: 'Butter', hex: '#f2e29a' }, { name: 'Banana', hex: '#f3dc6b' },
+  { name: 'Mustard', hex: '#d49a2c' }, { name: 'Yam', hex: '#c66a33' }, { name: 'Terracotta', hex: '#c0765a' }, { name: 'Paprika', hex: '#b04a2f' },
+  { name: 'Crimson', hex: '#9a2b3c' }, { name: 'Brick', hex: '#8a3f35' }, { name: 'Berry', hex: '#8a3a5c' }, { name: 'Blossom', hex: '#efc2cc' },
+  { name: 'Orchid', hex: '#c8a3c0' }, { name: 'Violet', hex: '#8d7ea9' }, { name: 'Chalky Mint', hex: '#a9d3c3' }, { name: 'Seafoam', hex: '#a3c8b4' },
+  { name: 'Sage', hex: '#a2ad8a' }, { name: 'Moss', hex: '#6e744a' }, { name: 'Island Green', hex: '#3f8f73' }, { name: 'Blue Spruce', hex: '#5a7b78' },
+  { name: 'Ice Blue', hex: '#a9c3d6' }, { name: 'Chambray', hex: '#b6c7d6' }, { name: 'Denim', hex: '#6c86a0' }, { name: 'Blue Jean', hex: '#7391ae' },
+  { name: 'Flo Blue', hex: '#5b98cf' }, { name: 'Midnight', hex: '#212b45' }, { name: 'Navy', hex: '#2c3a57' }, { name: 'Grey', hex: '#9a9a97' },
+  { name: 'Graphite', hex: '#5b5d5f' }, { name: 'Pepper', hex: '#4a4a48' }, { name: 'Black', hex: '#1d1d1d' },
 ]
-// Simple front-view T-shirt, drawn in a 600 x 640 box. The art sits on the chest.
+// Where the print sits, in the shirt's 600 x 640 drawing. A 12 in print is about 160 units wide (the chest is about 22 in = 320 units).
+const PRINTS = [
+  { label: 'Full chest · 12 in wide', inches: 12, cx: 300, top: 190 },
+  { label: 'Large · 14 in wide', inches: 14, cx: 300, top: 180 },
+  { label: 'Medium · 9 in wide', inches: 9, cx: 300, top: 190 },
+  { label: 'Left pocket · 4 in wide', inches: 4, cx: 378, top: 200 },
+]
+const UNITS_PER_INCH = 320 / 22
+// Relaxed, boxy front view of a garment-dyed heavyweight tee: dropped shoulders, short wide sleeves, thick rib collar.
+// Drawn in a 600 x 640 box and moved down 40 so it sits in the middle.
+const BODY = 'M232 62 L160 82 L52 170 L88 238 L140 206 L140 486 Q140 500 154 500 L446 500 Q460 500 460 486 L460 206 L512 238 L548 170 L440 82 L368 62 Q300 112 232 62 Z'
+const NECK_BACK = 'M232 62 Q300 22 368 62 Q300 112 232 62 Z'
 const shirtSvg = (color: string) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 640"><path d="M210 60 L120 90 L30 210 L100 255 L150 215 L150 590 Q150 602 162 602 L438 602 Q450 602 450 590 L450 215 L500 255 L570 210 L480 90 L390 60 Q300 120 210 60 Z" fill="${color}" stroke="rgba(0,0,0,.2)" stroke-width="3" stroke-linejoin="round"/><path d="M210 60 Q300 135 390 60 L384 52 Q300 118 216 52 Z" fill="rgba(0,0,0,.2)"/><path d="M150 215 Q160 150 120 92 M450 215 Q440 150 480 92 M150 578 L450 578" fill="none" stroke="rgba(0,0,0,.1)" stroke-width="3"/></svg>`
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 640"><defs><clipPath id="c"><path d="${BODY}"/></clipPath>` +
+  `<filter id="m" x="0" y="-40" width="100%" height="640" filterUnits="userSpaceOnUse"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" seed="7"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  .9 0 0 0 -.3"/></filter>` +
+  `<linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#000" stop-opacity=".12"/><stop offset=".2" stop-color="#000" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".12"/></linearGradient></defs>` +
+  `<g transform="translate(0 40)">` +
+  `<path d="${NECK_BACK}" fill="${color}"/><path d="${NECK_BACK}" fill="rgba(0,0,0,.3)"/>` +
+  `<path d="${BODY}" fill="${color}"/>` +
+  `<g clip-path="url(#c)"><rect x="0" y="-40" width="600" height="640" filter="url(#m)" opacity=".1"/><rect x="0" y="-40" width="600" height="640" fill="url(#g)"/></g>` +
+  `<path d="M232 62 Q300 112 368 62" fill="none" stroke="rgba(0,0,0,.14)" stroke-width="11"/>` +
+  `<path d="M160 82 Q146 140 140 206 M440 82 Q454 140 460 206 M160 82 L232 62 M440 82 L368 62" fill="none" stroke="rgba(0,0,0,.12)" stroke-width="2.5"/>` +
+  `<path d="M142 482 L458 482 M62 176 L96 236 M538 176 L504 236" fill="none" stroke="rgba(0,0,0,.14)" stroke-width="2" stroke-dasharray="6 5"/>` +
+  `<path d="${BODY}" fill="none" stroke="rgba(0,0,0,.22)" stroke-width="3" stroke-linejoin="round"/></g></svg>`
 const shirtUri = (color: string) => 'data:image/svg+xml;utf8,' + encodeURIComponent(shirtSvg(color))
 const FONT_COMBOS = [
   { label: 'Add a heading', size: 120, bold: true, font: 0 },
@@ -51,8 +79,9 @@ export default function Editor() {
   const [busy, setBusy] = useState<string | null>(null)
   const [menu, setMenu] = useState(false)
   const [guides, setGuides] = useState(false)
-  const [mockColor, setMockColor] = useState(SHIRTS[1].hex)
+  const [mockColor, setMockColor] = useState(SHIRTS.find((c) => c.name === 'Black')!.hex)
   const [mockUrl, setMockUrl] = useState<string | null>(null)
+  const [printIdx, setPrintIdx] = useState(0)
 
   useEffect(() => {
     if (!design || !fit || !wrapRef.current) return
@@ -247,8 +276,9 @@ export default function Editor() {
     ctx.fillStyle = '#f1ede3'; ctx.fillRect(0, 0, 2048, 2048)
     const sw = 1800, sh = 1920, sx = 124, sy = 64
     ctx.drawImage(shirt, sx, sy, sw, sh)
-    const aw = 0.34 * sw, ah = aw * (design.height / design.width)
-    ctx.drawImage(art, sx + 0.33 * sw, sy + 0.2 * sh, aw, ah)
+    const pr = PRINTS[printIdx], u = sw / 600
+    const aw = pr.inches * UNITS_PER_INCH * u, ah = aw * (design.height / design.width)
+    ctx.drawImage(art, sx + pr.cx * u - aw / 2, sy + pr.top * u, aw, ah)
     download(c.toDataURL('image/png'), (design.name.replace(/[^\w-]+/g, '_') || 'design') + '-mockup.png')
   }
   useEffect(() => { if (tab === 'mockup') refreshMock() }, [tab, pageIndex]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -364,19 +394,28 @@ export default function Editor() {
           )}
           {tab === 'mockup' && (
             <>
-              <h3>T-shirt mockup</h3>
+              <h3>Comfort Colors 1717 mockup</h3>
               <div className="shirt-preview">
                 <img className="shirt" src={shirtUri(mockColor)} alt="" />
-                {mockUrl && <img className="shirt-art" src={mockUrl} alt="" style={{ height: `${(design.height / design.width) * 34 * (600 / 640)}%` }} />}
+                {mockUrl && (() => {
+                  const pr = PRINTS[printIdx], w = pr.inches * UNITS_PER_INCH
+                  return <img className="shirt-art" src={mockUrl} alt="" style={{ left: `${((pr.cx - w / 2) / 600) * 100}%`, top: `${(pr.top / 640) * 100}%`, width: `${(w / 600) * 100}%`, height: 'auto' }} />
+                })()}
               </div>
+              <p className="small"><b>{SHIRTS.find((c) => c.hex === mockColor)?.name}</b></p>
               <div className="swatches">
-                {SHIRTS.map((c) => <button key={c.hex} className="swatch" style={{ background: c.hex, outline: c.hex === mockColor ? '2px solid var(--accent)' : 'none' }} title={c.name} onClick={() => setMockColor(c.hex)} />)}
+                {SHIRTS.map((c) => <button key={c.hex} className="swatch" style={{ background: c.hex, outline: c.hex === mockColor ? '2px solid var(--accent)' : 'none', outlineOffset: 1 }} title={c.name} onClick={() => setMockColor(c.hex)} />)}
               </div>
+              <label>Print size on the shirt
+                <select value={printIdx} onChange={(e) => setPrintIdx(+e.target.value)}>
+                  {PRINTS.map((p, i) => <option key={p.label} value={i}>{p.label}</option>)}
+                </select>
+              </label>
               <div className="row">
                 <button onClick={refreshMock}>Update preview</button>
                 <button className="primary" onClick={downloadMock} disabled={!mockUrl}>Download</button>
               </div>
-              <p className="muted small">Shows this page on the chest. Use a transparent background so only your art shows. The download is a 2048 × 2048 picture, ready for a Shopify listing.</p>
+              <p className="muted small">The print size is the width of your whole canvas, so trim empty space around the art. Use a transparent background. The download is 2048 × 2048, ready for a Shopify listing. Shirt colours are close matches, not exact.</p>
             </>
           )}
         </aside>
