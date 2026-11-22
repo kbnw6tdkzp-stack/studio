@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { db } from '../lib/db'
 import { useDraft, useLive, go } from '../lib/hooks'
 import { saveWorkOrder } from '../lib/repo'
@@ -8,6 +8,7 @@ import { STATUS, customerName, dateTime, vehicleName, woNumber } from '../lib/fo
 import { customerDoc, KIND_LABEL } from '../lib/customerDoc'
 import { Badge, Empty, Field, NumField, Section, Select, Sheet, Toggle } from '../components/ui'
 import { SignSheet } from '../components/SignSheet'
+import { PendingLink, SendLinkSheet } from '../components/SendLink'
 import type { Business, Job, Part, Payment, SignatureKind, Status, WorkOrder, WorkOrderData } from '../lib/types'
 
 export default function OrderEdit({ id, business }: { id: string; business: Business }) {
@@ -19,10 +20,21 @@ export default function OrderEdit({ id, business }: { id: string; business: Busi
       c: w?.customer_id ? await db.customers.get(w.customer_id) : undefined,
       v: w?.vehicle_id ? await db.vehicles.get(w.vehicle_id) : undefined,
       sigs: (await db.signatures.where('work_order_id').equals(id).toArray()).sort((a, b) => a.signed_at.localeCompare(b.signed_at)),
+      reqs: (await db.sign_requests.where('work_order_id').equals(id).toArray()).filter((r) => r.status === 'pending'),
     }
   }, [id])
   const [w, commit] = useDraft<WorkOrder>(row, saveWorkOrder)
   const [signing, setSigning] = useState<SignatureKind | null>(null)
+  const [sending, setSending] = useState<SignatureKind | null>(null)
+
+  // A signature can arrive from a texted link. Move the status forward here too, so
+  // this device never sends back an older status.
+  useEffect(() => {
+    if (!w || !rel) return
+    const has = (k: SignatureKind) => rel.sigs.some((x) => x.kind === k)
+    if (has('repair') && ['draft', 'diag_authorized', 'estimate'].includes(w.status)) commit({ ...w, status: 'approved' }, true)
+    else if (has('diagnosis') && w.status === 'draft') commit({ ...w, status: 'diag_authorized' }, true)
+  }, [rel, w, commit])
   const [paying, setPaying] = useState(false)
 
   if (row === undefined || !rel) return <Empty>Loading…</Empty>
@@ -85,9 +97,10 @@ export default function OrderEdit({ id, business }: { id: string; business: Busi
         <Toggle label="Credit diagnosis toward repair" hint="Takes the diagnosis fee off the labor if they approve the repair."
           checked={d.diag.creditToRepair} onChange={(creditToRepair) => setData({ diag: { ...d.diag, creditToRepair } })} />
         <Toggle label="Waive diagnosis fee" checked={d.diag.waived} onChange={(waived) => setData({ diag: { ...d.diag, waived } })} />
-        {diagSig ? <Signed s={diagSig} /> : (
-          <button className="block" onClick={() => setSigning('diagnosis')}>Customer signs: authorize {money(t.diag)} diagnosis</button>
-        )}
+        {diagSig ? <Signed s={diagSig} /> : <>
+          <SignChoice label={`Customer signs: authorize ${money(t.diag)} diagnosis`} onHere={() => setSigning('diagnosis')} onSend={() => setSending('diagnosis')} />
+          {rel.reqs.filter((r) => r.kind === 'diagnosis').map((r) => <PendingLink key={r.id} r={r} b={business} c={rel.c} />)}
+        </>}
         <Field label="Findings" value={d.findings} onChange={(findings) => setData({ findings })} multiline
           placeholder="What you found. This shows on the customer copy." />
       </Section>
@@ -169,8 +182,9 @@ export default function OrderEdit({ id, business }: { id: string; business: Busi
         <div className="private">Only you see this: parts cost {money(t.partsCost)} · parts profit {money(t.profitOnParts)} · labor {money(t.labor)}</div>
         {overApproved && <p className="banner">The total is now {money(t.total)}, more than the {money(approvedTotal!)} the customer approved. Get a new signature before doing the extra work.</p>}
         {(!repairSig || overApproved) && d.jobs.length > 0 && (
-          <button className="block" onClick={() => setSigning('repair')}>Customer signs: approve repair {money(t.total)}</button>
+          <SignChoice label={`Customer signs: approve repair ${money(t.total)}`} onHere={() => setSigning('repair')} onSend={() => setSending('repair')} />
         )}
+        {rel.reqs.filter((r) => r.kind === 'repair').map((r) => <PendingLink key={r.id} r={r} b={business} c={rel.c} />)}
         {repairSig && <Signed s={repairSig} />}
       </Section>
 
@@ -211,6 +225,7 @@ export default function OrderEdit({ id, business }: { id: string; business: Busi
         ? <button className="danger" onClick={() => { if (confirm('Void this work order? It keeps its number so your records stay in order.')) setStatus('void') }}>Void work order</button>
         : <button className="secondary" onClick={() => setStatus('draft')}>Reopen work order</button>}
 
+      {sending && <SendLinkSheet kind={sending} w={w} b={business} c={rel.c} v={rel.v} onClose={() => setSending(null)} />}
       {signing && <SignSheet kind={signing} w={w} doc={doc} defaultName={rel.c?.name ?? ''} onClose={() => setSigning(null)} onSigned={() => onSigned(signing)} />}
       {paying && <PaySheet balance={t.balance} onClose={() => setPaying(false)} onPay={(p) => {
         const payments = [...d.payments, p]
@@ -222,13 +237,22 @@ export default function OrderEdit({ id, business }: { id: string; business: Busi
   )
 }
 
-function Signed({ s }: { s: { kind: SignatureKind; signer_name: string; signed_at: string; image: string; snapshot: unknown; snapshot_hash: string } }) {
+function SignChoice({ label, onHere, onSend }: { label: string; onHere: () => void; onSend: () => void }) {
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <button className="block" onClick={onHere}>{label}</button>
+      <button className="secondary block" onClick={onSend}>Not with them? Text a signing link</button>
+    </div>
+  )
+}
+
+function Signed({ s }: { s: { kind: SignatureKind; signer_name: string; signed_at: string; image: string; snapshot: unknown; snapshot_hash: string; method?: string } }) {
   const amount = (s.snapshot as { amount?: number })?.amount
   return (
     <div className="signed">
       <div className="spread"><b>✓ {KIND_LABEL[s.kind]}</b>{amount != null && <span className="num">{money(amount)}</span>}</div>
       <img src={s.image} alt={`Signature of ${s.signer_name}`} />
-      <div className="small muted">{s.signer_name} · {dateTime(s.signed_at)} · #{s.snapshot_hash.slice(0, 10)}</div>
+      <div className="small muted">{s.signer_name} · {dateTime(s.signed_at)}{s.method === 'remote' ? ' · signed online' : ''} · #{s.snapshot_hash.slice(0, 10)}</div>
     </div>
   )
 }

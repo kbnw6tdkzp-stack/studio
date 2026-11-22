@@ -1,7 +1,7 @@
 import Dexie, { type Table } from 'dexie'
-import type { Business, Customer, Profile, Signature, Vehicle, WorkOrder } from './types'
+import type { Business, Customer, Profile, Signature, SignRequest, Vehicle, WorkOrder } from './types'
 
-export type SyncTable = 'businesses' | 'profiles' | 'customers' | 'vehicles' | 'work_orders' | 'signatures'
+export type SyncTable = 'businesses' | 'profiles' | 'customers' | 'vehicles' | 'work_orders' | 'sign_requests' | 'signatures'
 
 export interface OutboxItem { seq?: number; table: SyncTable; key: string }
 export interface Meta { key: string; value: unknown }
@@ -15,6 +15,7 @@ class LocalDB extends Dexie {
   vehicles!: Table<Vehicle, string>
   work_orders!: Table<WorkOrder, string>
   signatures!: Table<Signature, string>
+  sign_requests!: Table<SignRequest, string>
   outbox!: Table<OutboxItem, number>
   meta!: Table<Meta, string>
   constructor() {
@@ -29,6 +30,7 @@ class LocalDB extends Dexie {
       outbox: '++seq, table, key',
       meta: 'key',
     })
+    this.version(2).stores({ sign_requests: 'id, work_order_id, business_id' })
   }
 }
 

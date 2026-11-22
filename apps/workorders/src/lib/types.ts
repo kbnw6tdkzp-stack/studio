@@ -147,4 +147,30 @@ export interface Signature {
   user_agent: string
   signed_at: string
   created_at: string
+  signer_ip?: string
+  sign_request_id?: string | null
+}
+
+export interface SignRequest {
+  id: ID
+  business_id: ID
+  work_order_id: ID
+  kind: SignatureKind
+  token_hash: string
+  document: RemoteDocument
+  status: 'pending' | 'signed' | 'cancelled'
+  signature_id: ID | null
+  expires_at: string
+  viewed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Exactly what the customer sees on their phone. Never includes your cost. */
+export interface RemoteDocument {
+  label: string
+  terms: string[]
+  amount: number
+  logo: string | null
+  doc: import('./customerDoc').CustomerDoc
 }

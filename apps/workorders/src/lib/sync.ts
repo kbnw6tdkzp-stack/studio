@@ -2,9 +2,9 @@ import { supabase } from './supabase'
 import { db, getMeta, setMeta, type SyncTable } from './db'
 
 // Order matters: a vehicle needs its customer on the server first, and so on.
-const ORDER: SyncTable[] = ['businesses', 'profiles', 'customers', 'vehicles', 'work_orders', 'signatures']
+const ORDER: SyncTable[] = ['businesses', 'profiles', 'customers', 'vehicles', 'work_orders', 'sign_requests', 'signatures']
 const KEY: Record<SyncTable, string> = {
-  businesses: 'id', profiles: 'user_id', customers: 'id', vehicles: 'id', work_orders: 'id', signatures: 'id',
+  businesses: 'id', profiles: 'user_id', customers: 'id', vehicles: 'id', work_orders: 'id', sign_requests: 'id', signatures: 'id',
 }
 // Fields the server controls. Never sent up.
 const SERVER_ONLY: Partial<Record<SyncTable, string[]>> = {
@@ -140,3 +140,13 @@ window.addEventListener('online', () => { emit({ online: true }); scheduleSync(0
 window.addEventListener('offline', () => emit({ online: false }))
 document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleSync(0) })
 setInterval(() => scheduleSync(0), 60_000)
+
+/** Upload everything waiting on this device, waiting out a sync that's already running. */
+export async function flushSync(rounds = 4) {
+  for (let i = 0; i < rounds; i++) {
+    if (running) await running
+    await syncNow()
+    if (state.error) throw new Error(state.error)
+    if (!(await db.outbox.count())) return
+  }
+}
