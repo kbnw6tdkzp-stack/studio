@@ -1,4 +1,5 @@
--- Work Orders app schema.
+-- Work Orders app schema. Safe to run more than once.
+-- To apply by hand: Supabase dashboard > SQL Editor > New query > paste this whole file > Run.
 -- Every row belongs to a business. Row Level Security (RLS) makes sure a signed-in
 -- user only ever sees rows for businesses they belong to, on every device.
 -- Ids are generated on the device (uuid) so records can be created offline and
@@ -213,7 +214,7 @@ create index if not exists signatures_business_created on public.signatures(busi
 
 -- ---------------------------------------------------------------- updated_at
 create or replace function public.touch_updated_at()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 begin new.updated_at := now(); return new; end $$;
 
 do $$ declare t text; begin
@@ -268,8 +269,10 @@ drop policy if exists "members add" on public.signatures;
 create policy "members add" on public.signatures for insert
   with check (business_id in (select public.my_business_ids()));
 
-revoke execute on function public.set_next_work_order_number(uuid, integer) from anon;
-revoke execute on function public.get_next_work_order_number(uuid) from anon;
+revoke execute on function public.set_next_work_order_number(uuid, integer) from anon, public;
+revoke execute on function public.get_next_work_order_number(uuid) from anon, public;
+grant execute on function public.set_next_work_order_number(uuid, integer) to authenticated;
+grant execute on function public.get_next_work_order_number(uuid) to authenticated;
 
 -- ---------------------------------------------------------------- storage: logos
 insert into storage.buckets (id, name, public) values ('logos', 'logos', true)
