@@ -45,8 +45,12 @@ async function push() {
         : supabase.from(table).upsert(chunk, { onConflict: KEY[table] }).select()
       const { data, error } = await q
       if (error) throw new Error(`${table}: ${error.message}`)
-      // Bring back what the server set (work order numbers, timestamps).
-      if (data?.length) await (db[table] as any).bulkPut(data)
+      // Bring back what the server set (work order numbers, timestamps), except for
+      // records you've changed again on this device since this upload started.
+      if (data?.length) {
+        const newer = new Set((await db.outbox.where('seq').above(maxSeq).toArray()).filter((i) => i.table === table).map((i) => i.key))
+        await (db[table] as any).bulkPut(data.filter((r: Record<string, string>) => !newer.has(r[KEY[table]])))
+      }
     }
   }
   await db.outbox.where('seq').belowOrEqual(maxSeq).delete()
@@ -92,6 +96,7 @@ export async function pullAccount(userId: string): Promise<string | null> {
 
 let timer: ReturnType<typeof setTimeout> | undefined
 let running: Promise<void> | null = null
+let again = false
 let currentBusiness: string | null = null
 let currentUser: string | null = null
 
@@ -109,7 +114,9 @@ export function scheduleSync(delay = 800) {
 
 export async function syncNow() {
   if (!currentUser || !navigator.onLine) { emit({ online: navigator.onLine }); return }
-  if (running) return running
+  // A save that lands while a sync is running must not be dropped: run again right after.
+  if (running) { again = true; return running }
+  again = false
   running = (async () => {
     emit({ syncing: true, error: null, online: true })
     try {
@@ -123,6 +130,7 @@ export async function syncNow() {
     } finally {
       emit({ syncing: false, pending: await db.outbox.count() })
       running = null
+      if (again && !state.error) scheduleSync(0)
     }
   })()
   return running

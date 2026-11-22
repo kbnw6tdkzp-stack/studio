@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { liveQuery } from 'dexie'
 import { subscribeSync, type SyncState } from './sync'
 
@@ -29,3 +29,34 @@ export function useRoute(): string[] {
   return hash.replace(/^#\/?/, '').split('/').filter(Boolean)
 }
 export const go = (path: string) => { location.hash = path }
+
+/**
+ * Local editable copy of a saved record. Your typing always wins: fresh data from
+ * the device (e.g. after a sync) is only taken when every edit you made has been saved.
+ * Edits are saved after a short pause, and immediately when you leave the screen.
+ */
+export function useDraft<T>(source: T | null | undefined, save: (v: T) => Promise<unknown>, delay = 400) {
+  const [draft, setDraft] = useState<T | null>(null)
+  const ver = useRef(0)
+  const saved = useRef(0)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const latest = useRef<T | null>(null)
+  const saveRef = useRef(save)
+  saveRef.current = save
+
+  useEffect(() => { if (source && ver.current === saved.current) { setDraft(source); latest.current = source } }, [source])
+  useEffect(() => () => {
+    clearTimeout(timer.current)
+    if (ver.current !== saved.current && latest.current) void saveRef.current(latest.current)
+  }, [])
+
+  const update = (next: T, now = false) => {
+    setDraft(next)
+    latest.current = next
+    const v = ++ver.current
+    clearTimeout(timer.current)
+    const run = async () => { await saveRef.current(next); if (saved.current < v) saved.current = v }
+    if (now) void run(); else timer.current = setTimeout(run, delay)
+  }
+  return [draft, update] as const
+}
