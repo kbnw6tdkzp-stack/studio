@@ -2,16 +2,18 @@ import { useState } from 'react'
 import { Field, Sheet } from './ui'
 import { checkVin, decodeVin } from '../lib/vin'
 import { saveVehicle } from '../lib/repo'
+import { VinScanner } from './VinScanner'
 import type { Vehicle } from '../lib/types'
 
 export function VehicleSheet({ vehicle, onClose, onSaved }: { vehicle: Vehicle; onClose: () => void; onSaved?: (v: Vehicle) => void }) {
   const [v, setV] = useState<Vehicle>(vehicle)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ error?: string; info?: string }>({})
+  const [scanning, setScanning] = useState(false)
   const set = (patch: Partial<Vehicle>) => setV((x) => ({ ...x, ...patch }))
 
-  const lookup = async () => {
-    const c = checkVin(v.vin)
+  const lookup = async (raw = v.vin) => {
+    const c = checkVin(raw)
     set({ vin: c.vin })
     if (!c.ok) { setMsg({ error: c.message }); return }
     if (!navigator.onLine) { setMsg({ info: 'No signal right now. The VIN is saved; tap Look up again when you’re back online.' }); return }
@@ -30,12 +32,14 @@ export function VehicleSheet({ vehicle, onClose, onSaved }: { vehicle: Vehicle; 
 
   return (
     <Sheet title={vehicle.make ? 'Edit vehicle' : 'Add vehicle'} onClose={onClose}>
+      {scanning && <VinScanner onClose={() => setScanning(false)} onVin={(vin) => { setScanning(false); set({ vin }); void lookup(vin) }} />}
+      <button className="block" onClick={() => setScanning(true)}>Scan VIN barcode</button>
       <div className="row" style={{ alignItems: 'flex-end' }}>
         <div style={{ flex: 1 }}>
           <Field label="VIN" value={v.vin} onChange={(vin) => set({ vin: vin.toUpperCase() })} placeholder="17 characters"
             hint="Door jamb sticker, dash at the windshield, or registration." />
         </div>
-        <button className="secondary" onClick={lookup} disabled={busy || !v.vin} style={{ marginBottom: 22 }}>{busy ? 'Looking up…' : 'Look up'}</button>
+        <button className="secondary" onClick={() => void lookup()} disabled={busy || !v.vin} style={{ marginBottom: 22 }}>{busy ? 'Looking up…' : 'Look up'}</button>
       </div>
       {msg.error && <p className="error">{msg.error}</p>}
       {msg.info && <p className="banner">{msg.info}</p>}

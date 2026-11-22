@@ -53,3 +53,21 @@ export async function decodeVin(vin: string): Promise<Decoded> {
     details,
   }
 }
+
+/**
+ * Pull a VIN out of whatever a barcode contains. Door-jamb Code 39 labels often add a
+ * leading "I" (import marker); windshield and registration codes can hold other text too.
+ * Prefers a candidate whose check digit is valid.
+ */
+export function extractVin(raw: string): string | null {
+  const text = raw.toUpperCase().replace(/[^A-Z0-9]/g, ' ')
+  const candidates: string[] = []
+  for (const word of text.split(/\s+/)) {
+    if (word.length === 17) candidates.push(word)
+    else if (word.length === 18 && word.startsWith('I')) candidates.push(word.slice(1))
+    else if (word.length > 17) for (let i = 0; i + 17 <= word.length; i++) candidates.push(word.slice(i, i + 17))
+  }
+  const valid = candidates.filter((c) => !/[IOQ]/.test(c))
+  const perfect = valid.find((c) => { const r = checkVin(c); return r.ok && r.message === '' })
+  return perfect ?? (valid.length === 1 ? valid[0] : null)
+}
