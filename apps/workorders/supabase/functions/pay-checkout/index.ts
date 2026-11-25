@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
   f.set('mode', 'payment')
   f.set('success_url', `${back}/done`)
   f.set('cancel_url', back)
-  f.set('payment_method_types[0]', 'card') // card fee applies to cards; Apple Pay / Google Pay are cards
+  f.set('allowed_payment_method_types[0]', 'card') // card fee applies to cards; Apple Pay / Google Pay are cards
   f.set('line_items[0][quantity]', '1')
   f.set('line_items[0][price_data][currency]', 'usd')
   f.set('line_items[0][price_data][unit_amount]', String(Math.round(Number(r.amount) * 100)))
