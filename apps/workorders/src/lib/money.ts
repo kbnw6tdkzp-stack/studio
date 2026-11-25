@@ -33,12 +33,14 @@ export function totals(d: WorkOrderData): Totals {
   // Crediting the diagnosis toward the repair only applies once there's labor to credit against.
   const diagCredit = d.diag.creditToRepair ? Math.min(diag, labor) : 0
   const fees = r2(d.fees.reduce((s, f) => s + num(f.amount), 0))
-  const taxableFees = r2(d.fees.filter((f) => f.taxable).reduce((s, f) => s + num(f.amount), 0))
+  // Card processing fees are never taxed.
+  const taxableFees = r2(d.fees.filter((f) => f.taxable && !f.card).reduce((s, f) => s + num(f.amount), 0))
+  const nonCardFees = r2(d.fees.filter((f) => !f.card).reduce((s, f) => s + num(f.amount), 0))
   const subtotal = r2(parts + labor + diag - diagCredit + fees)
   const taxable = r2(
     (d.tax.taxParts ? parts : 0) +
       (d.tax.taxLabor ? labor + diag - diagCredit : 0) +
-      (d.tax.taxFees ? fees : taxableFees),
+      (d.tax.taxFees ? nonCardFees : taxableFees),
   )
   const tax = r2((taxable * num(d.tax.rate)) / 100)
   const total = r2(subtotal + tax)

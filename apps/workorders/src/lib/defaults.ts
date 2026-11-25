@@ -37,6 +37,8 @@ export const defaultSettings = (): Settings => ({
   numberPrefix: 'WO-',
   numberPad: 4,
   customerView: 'combined',
+  cardFeeEnabled: true,
+  cardFeePct: 3,
 })
 
 export const withDefaults = (s: Partial<Settings> | null | undefined): Settings => {

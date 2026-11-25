@@ -28,6 +28,8 @@ export interface Settings {
   numberPrefix: string
   numberPad: number
   customerView: 'combined' | 'itemized'
+  cardFeeEnabled: boolean
+  cardFeePct: number
 }
 
 export interface Business {
@@ -93,7 +95,7 @@ export interface Vehicle {
 
 export interface Part { id: ID; desc: string; partNo: string; qty: number; cost: number; price: number }
 export interface Job { id: ID; title: string; notes: string; parts: Part[]; laborHours: number; laborRate: number }
-export interface Fee { id: ID; name: string; amount: number; taxable: boolean }
+export interface Fee { id: ID; name: string; amount: number; taxable: boolean; card?: boolean }
 export interface Payment { id: ID; amount: number; method: string; date: string; note: string }
 
 export interface WorkOrderData {
@@ -173,4 +175,35 @@ export interface RemoteDocument {
   amount: number
   logo: string | null
   doc: import('./customerDoc').CustomerDoc
+}
+
+export interface PayRequest {
+  id: ID
+  business_id: ID
+  work_order_id: ID
+  token_hash: string
+  document: RemoteDocument
+  amount: number
+  card_fee: number
+  card_fee_pct: number
+  return_url: string
+  status: 'pending' | 'paid' | 'cancelled'
+  stripe_session_id: string | null
+  paid_at: string | null
+  viewed_at: string | null
+  expires_at: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CardPayment {
+  id: ID
+  business_id: ID
+  work_order_id: ID
+  pay_request_id: ID | null
+  stripe_session_id: string
+  amount: number
+  fee: number
+  fee_pct: number
+  created_at: string
 }

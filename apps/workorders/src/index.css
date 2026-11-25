@@ -189,3 +189,5 @@ button.item:active { background: var(--surface-2); }
 .doc-wrap .banner { color: var(--text); }
 a.btn { display: grid; place-items: center; min-height: 44px; padding: 0 16px; border-radius: 10px; font-weight: 600; text-decoration: none; background: var(--accent); color: var(--accent-text); }
 a.btn.secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
+.qr { background: #fff; border-radius: 14px; padding: 10px; width: min(260px, 70vw); margin: 0 auto; }
+.qr svg { display: block; width: 100%; height: auto; }

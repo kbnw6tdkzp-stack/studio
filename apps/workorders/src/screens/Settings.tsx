@@ -7,6 +7,7 @@ import { syncNow } from '../lib/sync'
 import { uid, withDefaults, defaultSettings } from '../lib/defaults'
 import { ENTITY, dateTime } from '../lib/format'
 import { logoUrl } from '../lib/logo'
+import { stripeStatus } from '../lib/payments'
 import { Field, NumField, Section, Select, Toggle } from '../components/ui'
 import type { Business, Profile, Settings as S } from '../lib/types'
 
@@ -110,6 +111,7 @@ export default function Settings({ business, user }: { business: Business; user:
         <p className="small muted">Your cost and markup are never shown either way. California law requires final invoices to list parts and labor separately, so switch to the second option there if your invoices must comply.</p>
       </Section>
 
+      <Payments s={s} setS={setS} />
       <Numbering b={b} prefix={s.numberPrefix} pad={s.numberPad} setS={setS} />
       <Appearance />
       <Account email={user.email} />
@@ -248,6 +250,28 @@ function Account({ email }: { email: string }) {
         await supabase.auth.signOut()
         await Promise.all(db.tables.map((t) => t.clear()))
       }}>Sign out</button>
+    </Section>
+  )
+}
+
+function Payments({ s, setS }: { s: S; setS: (p: Partial<S>) => void }) {
+  const [status, setStatus] = useState<{ configured: boolean; mode: 'test' | 'live' | null } | null | undefined>(undefined)
+  useEffect(() => { void stripeStatus().then(setStatus) }, [])
+  return (
+    <Section title="Card payments (Stripe)">
+      <div className="spread">
+        <span>Stripe</span>
+        {status === undefined ? <span className="muted small">Checking…</span>
+          : !status ? <span className="muted small">Can’t check while offline</span>
+          : !status.configured ? <span className="badge red">Not connected</span>
+          : status.mode === 'live' ? <span className="badge green">Connected · live</span>
+          : <span className="badge amber">Connected · test mode</span>}
+      </div>
+      {status && !status.configured && <p className="small muted">Add your Stripe secret key in Supabase (Edge Functions › Secrets, named STRIPE_SECRET_KEY). See the setup steps in the app’s README.</p>}
+      {status?.mode === 'test' && <p className="small muted">Test mode: use card 4242 4242 4242 4242, any future date, any CVC. No real money moves. Switch to your live key when you’re ready.</p>}
+      <Toggle label="Add a card processing fee" hint="Added to the total when the customer pays by card, shown before they pay." checked={s.cardFeeEnabled} onChange={(cardFeeEnabled) => setS({ cardFeeEnabled })} />
+      {s.cardFeeEnabled && <NumField label="Card fee" value={s.cardFeePct} suffix="%" onChange={(n) => setS({ cardFeePct: Math.max(0, Math.min(10, n)) })} />}
+      {s.cardFeeEnabled && <p className="small muted">Card brands generally cap surcharges at 3% and don’t allow them on debit cards, and some require notice before you start. Check the current rules for California and Nevada with Stripe or your accountant.</p>}
     </Section>
   )
 }

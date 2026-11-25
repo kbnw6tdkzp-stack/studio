@@ -1,10 +1,12 @@
 import { supabase } from './supabase'
 import { db, getMeta, setMeta, type SyncTable } from './db'
+import { totals } from './money'
+import type { WorkOrder } from './types'
 
 // Order matters: a vehicle needs its customer on the server first, and so on.
-const ORDER: SyncTable[] = ['businesses', 'profiles', 'customers', 'vehicles', 'work_orders', 'sign_requests', 'signatures']
+const ORDER: SyncTable[] = ['businesses', 'profiles', 'customers', 'vehicles', 'work_orders', 'sign_requests', 'signatures', 'pay_requests', 'card_payments']
 const KEY: Record<SyncTable, string> = {
-  businesses: 'id', profiles: 'user_id', customers: 'id', vehicles: 'id', work_orders: 'id', sign_requests: 'id', signatures: 'id',
+  businesses: 'id', profiles: 'user_id', customers: 'id', vehicles: 'id', work_orders: 'id', sign_requests: 'id', signatures: 'id', pay_requests: 'id', card_payments: 'id',
 }
 // Fields the server controls. Never sent up.
 const SERVER_ONLY: Partial<Record<SyncTable, string[]>> = {
@@ -61,7 +63,7 @@ async function pull(businessId: string | null) {
   for (const table of ORDER) {
     if (table === 'profiles' || table === 'businesses') continue
     if (!businessId) return
-    const col = table === 'signatures' ? 'created_at' : 'updated_at'
+    const col = table === 'signatures' || table === 'card_payments' ? 'created_at' : 'updated_at'
     const since = (await getMeta<string>(`pulled:${table}`)) ?? '1970-01-01T00:00:00Z'
     let cursor = since
     for (;;) {
@@ -124,6 +126,7 @@ export async function syncNow() {
       if (!currentBusiness) currentBusiness = await pullAccount(currentUser!)
       else await pullAccount(currentUser!)
       await pull(currentBusiness)
+      if (await reconcileCardPayments()) await push()
       emit({ lastSync: new Date().toISOString() })
     } catch (e) {
       emit({ error: e instanceof Error ? e.message : String(e) })
@@ -149,4 +152,32 @@ export async function flushSync(rounds = 4) {
     if (state.error) throw new Error(state.error)
     if (!(await db.outbox.count())) return
   }
+}
+
+/**
+ * Card payments are recorded by the server when Stripe confirms them. If a device ever sends up an
+ * older copy of the work order without that payment, put it back. Same ids as the server uses, so
+ * nothing is ever counted twice.
+ */
+async function reconcileCardPayments(): Promise<boolean> {
+  const pays = await db.card_payments.toArray()
+  let changed = false
+  for (const p of pays) {
+    const w = await db.work_orders.get(p.work_order_id)
+    if (!w || w.data.payments.some((x) => x.id === p.id)) continue
+    const fees = Number(p.fee) > 0 && !w.data.fees.some((f) => f.id === `fee-${p.id}`)
+      ? [...w.data.fees, { id: `fee-${p.id}`, name: `Card processing fee (${Number(p.fee_pct)}%)`, amount: Number(p.fee), taxable: false, card: true }]
+      : w.data.fees
+    const data = { ...w.data, fees, payments: [...w.data.payments, { id: p.id, amount: Number(p.amount), method: 'Card (Stripe)', date: p.created_at, note: 'Paid online' }] }
+    const t = totals(data)
+    const paid = t.balance <= 0.005 && w.status !== 'void'
+    const row: WorkOrder = {
+      ...w, data, subtotal: t.subtotal, tax: t.tax, total: t.total, amount_paid: t.paid, parts_cost: t.partsCost,
+      status: paid ? 'paid' : w.status, paid_at: paid ? (w.paid_at ?? p.created_at) : w.paid_at, updated_at: new Date().toISOString(),
+    }
+    await db.work_orders.put(row)
+    await db.outbox.add({ table: 'work_orders', key: w.id })
+    changed = true
+  }
+  return changed
 }

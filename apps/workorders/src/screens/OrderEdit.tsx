@@ -9,6 +9,7 @@ import { customerDoc, KIND_LABEL } from '../lib/customerDoc'
 import { Badge, Empty, Field, NumField, Section, Select, Sheet, Toggle } from '../components/ui'
 import { SignSheet } from '../components/SignSheet'
 import { PendingLink, SendLinkSheet } from '../components/SendLink'
+import { GetPaidSheet, PendingPay } from '../components/GetPaid'
 import type { Business, Job, Part, Payment, SignatureKind, Status, WorkOrder, WorkOrderData } from '../lib/types'
 
 export default function OrderEdit({ id, business }: { id: string; business: Business }) {
@@ -21,6 +22,7 @@ export default function OrderEdit({ id, business }: { id: string; business: Busi
       v: w?.vehicle_id ? await db.vehicles.get(w.vehicle_id) : undefined,
       sigs: (await db.signatures.where('work_order_id').equals(id).toArray()).sort((a, b) => a.signed_at.localeCompare(b.signed_at)),
       reqs: (await db.sign_requests.where('work_order_id').equals(id).toArray()).filter((r) => r.status === 'pending'),
+      pays: (await db.pay_requests.where('work_order_id').equals(id).toArray()).filter((r) => r.status === 'pending'),
     }
   }, [id])
   const [w, commit] = useDraft<WorkOrder>(row, saveWorkOrder)
@@ -36,6 +38,7 @@ export default function OrderEdit({ id, business }: { id: string; business: Busi
     else if (has('diagnosis') && w.status === 'draft') commit({ ...w, status: 'diag_authorized' }, true)
   }, [rel, w, commit])
   const [paying, setPaying] = useState(false)
+  const [gettingPaid, setGettingPaid] = useState(false)
 
   if (row === undefined || !rel) return <Empty>Loading…</Empty>
   if (!row || !w) return <Empty>Work order not found.</Empty>
@@ -193,18 +196,20 @@ export default function OrderEdit({ id, business }: { id: string; business: Busi
           {w.status === 'draft' && <button className="secondary" onClick={() => setStatus('estimate')}>Mark estimate sent</button>}
           {['approved', 'diag_authorized', 'estimate'].includes(w.status) && <button className="secondary" onClick={() => setStatus('in_progress')}>Start work</button>}
           {['in_progress', 'approved'].includes(w.status) && <button className="secondary" onClick={() => setStatus('completed')}>Mark completed</button>}
-          {!['paid', 'void'].includes(w.status) && t.total > 0 && <button onClick={() => setPaying(true)}>Record payment</button>}
+          {!['paid', 'void'].includes(w.status) && t.balance > 0 && <button onClick={() => setGettingPaid(true)}>Get paid by card</button>}
+          {!['paid', 'void'].includes(w.status) && t.balance > 0 && <button className="secondary" onClick={() => setPaying(true)}>Record cash / other</button>}
           {w.status === 'completed' && !sigOf('completion') && <button className="secondary" onClick={() => setSigning('completion')}>Customer signs: work received</button>}
         </div>
+        {rel.pays.map((r) => <PendingPay key={r.id} r={r} b={business} c={rel.c} />)}
         {d.payments.length > 0 && (
           <div className="list">
             {d.payments.map((p) => (
               <div key={p.id} className="item"><div><div className="title">{money(p.amount)} · {p.method}</div><div className="sub">{dateTime(p.date)}{p.note ? ` · ${p.note}` : ''}</div></div>
-                <button className="ghost small" style={{ color: 'var(--danger)' }} onClick={() => {
+                {p.method !== 'Card (Stripe)' && <button className="ghost small" style={{ color: 'var(--danger)' }} onClick={() => {
                   if (!confirm('Remove this payment?')) return
                   const payments = d.payments.filter((x) => x.id !== p.id)
                   commit({ ...w, status: w.status === 'paid' ? 'completed' : w.status, data: { ...d, payments } }, true)
-                }}>Remove</button></div>
+                }}>Remove</button>}</div>
             ))}
           </div>
         )}
@@ -227,6 +232,7 @@ export default function OrderEdit({ id, business }: { id: string; business: Busi
 
       {sending && <SendLinkSheet kind={sending} w={w} b={business} c={rel.c} v={rel.v} onClose={() => setSending(null)} />}
       {signing && <SignSheet kind={signing} w={w} doc={doc} defaultName={rel.c?.name ?? ''} onClose={() => setSigning(null)} onSigned={() => onSigned(signing)} />}
+      {gettingPaid && <GetPaidSheet w={w} b={business} c={rel.c} v={rel.v} onClose={() => setGettingPaid(false)} onRecordOther={() => { setGettingPaid(false); setPaying(true) }} />}
       {paying && <PaySheet balance={t.balance} onClose={() => setPaying(false)} onPay={(p) => {
         const payments = [...d.payments, p]
         const paid = payments.reduce((sum, x) => sum + x.amount, 0)

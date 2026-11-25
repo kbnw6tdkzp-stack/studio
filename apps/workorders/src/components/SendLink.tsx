@@ -7,18 +7,17 @@ import { dateTime } from '../lib/format'
 import type { Business, Customer, SignatureKind, SignRequest, Vehicle, WorkOrder } from '../lib/types'
 
 const isApple = /iPhone|iPad|Macintosh/.test(navigator.userAgent)
-const smsHref = (phone: string, body: string) => `sms:${phone.replace(/[^\d+]/g, '')}${isApple ? '&' : '?'}body=${encodeURIComponent(body)}`
+export const smsHref = (phone: string, body: string) => `sms:${phone.replace(/[^\d+]/g, '')}${isApple ? '&' : '?'}body=${encodeURIComponent(body)}`
 
-function ShareButtons({ b, kind, amount, url, customer }: { b: Business; kind: SignatureKind; amount: number; url: string; customer?: Customer | null }) {
+export function ShareButtons({ text, subject, url, customer }: { text: string; subject: string; url: string; customer?: Customer | null }) {
   const [copied, setCopied] = useState(false)
-  const text = shareText(b, kind, money(amount), url)
   return (
     <div className="stack" style={{ gap: 8 }}>
       {customer?.phone && <a className="btn" href={smsHref(customer.phone, text)}>Text to {customer.phone}</a>}
       {typeof navigator.share === 'function' && (
-        <button className="secondary" onClick={() => navigator.share({ title: KIND_LABEL[kind], text }).catch(() => {})}>Share… (Messages, WhatsApp, Mail)</button>
+        <button className="secondary" onClick={() => navigator.share({ title: subject, text }).catch(() => {})}>Share… (Messages, WhatsApp, Mail)</button>
       )}
-      {customer?.email && <a className="btn secondary" href={`mailto:${customer.email}?subject=${encodeURIComponent(`${KIND_LABEL[kind]} – ${b.name}`)}&body=${encodeURIComponent(text)}`}>Email to {customer.email}</a>}
+      {customer?.email && <a className="btn secondary" href={`mailto:${customer.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`}>Email to {customer.email}</a>}
       <button className="secondary" onClick={async () => { try { await navigator.clipboard.writeText(url); setCopied(true) } catch { prompt('Copy this link', url) } }}>
         {copied ? 'Link copied' : 'Copy link'}</button>
     </div>
@@ -42,7 +41,7 @@ export function SendLinkSheet({ kind, w, b, c, v, onClose }: {
         : !state.url ? <p className="muted">Creating a secure link…</p>
         : <>
             <p>The customer opens this on their phone, reviews the work order, and signs with their finger. No app or account needed. It shows up here once they sign.</p>
-            <ShareButtons b={b} kind={kind} amount={state.amount ?? 0} url={state.url} customer={c} />
+            <ShareButtons text={shareText(b, kind, money(state.amount ?? 0), state.url)} subject={`${KIND_LABEL[kind]} – ${b.name}`} url={state.url} customer={c} />
             <p className="small muted">The link works for 14 days, once. It shows exactly what's on this work order now, without your cost. If you change the price, send a new link.</p>
           </>}
     </Sheet>
@@ -67,7 +66,7 @@ export function PendingLink({ r, b, c }: { r: SignRequest; b: Business; c?: Cust
       {err && <p className="error">{err}</p>}
       {open && url && (
         <Sheet title="Send again" onClose={() => setOpen(false)}>
-          <ShareButtons b={b} kind={r.kind} amount={r.document.amount} url={url} customer={c} />
+          <ShareButtons text={shareText(b, r.kind, money(r.document.amount), url)} subject={`${KIND_LABEL[r.kind]} – ${b.name}`} url={url} customer={c} />
         </Sheet>
       )}
     </div>

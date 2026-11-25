@@ -40,3 +40,13 @@ test('diagnosis credited toward repair', () => {
 test('markup', () => {
   assert.equal(priceFromCost(45.5, 30), 59.15)
 })
+
+test('card processing fee is never taxed, even where fees are taxed', () => {
+  const d = base()
+  d.tax.taxFees = true
+  d.fees.push({ id: 'f', name: 'Shop supplies', amount: 10, taxable: true })
+  d.fees.push({ id: 'c', name: 'Card fee', amount: 5, taxable: false, card: true })
+  const t = totals(d)
+  assert.equal(t.taxable, 10)
+  assert.equal(t.total, 160 + 10 + 5 + 0.88)
+})

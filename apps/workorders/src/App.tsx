@@ -14,6 +14,7 @@ import CustomerDetail from './screens/CustomerDetail'
 import Money from './screens/Money'
 import Settings from './screens/Settings'
 import SignPage from './screens/SignPage'
+import PayPage from './screens/PayPage'
 import { Tabs } from './components/Tabs'
 
 type CachedUser = { id: string; email: string }
@@ -71,6 +72,7 @@ export default function App() {
 
   // Customers open signing links without an account.
   if (route[0] === 'sign' && route[1]) return <SignPage token={route[1]} />
+  if (route[0] === 'pay' && route[1]) return <PayPage token={route[1]} returned={route[2] === 'done'} />
   if (user === undefined || businesses === undefined || checking) return <div className="app"><p className="empty">Loading…</p></div>
   if (!user) return <Login />
   if (!business) return <Onboarding userId={user.id} email={user.email} />
