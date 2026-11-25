@@ -2,12 +2,17 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Field } from '../components/ui'
 
-export default function Login() {
-  const [mode, setMode] = useState<'in' | 'up' | 'reset'>('in')
+const LINK_ERRORS: [RegExp, string][] = [
+  [/expired|invalid/i, 'That email link has expired or was already used. Tap “Forgot password?” to get a new one, and open only the newest email.'],
+]
+
+export default function Login({ linkError }: { linkError?: string | null }) {
+  const [mode, setMode] = useState<'in' | 'up' | 'reset'>(linkError ? 'reset' : 'in')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<{ error?: string; info?: string }>({})
+  const [msg, setMsg] = useState<{ error?: string; info?: string }>(() =>
+    linkError ? { error: LINK_ERRORS.find(([re]) => re.test(linkError))?.[1] ?? linkError } : {})
   const redirect = location.origin + location.pathname
 
   const submit = async (e: React.FormEvent) => {
@@ -22,9 +27,9 @@ export default function Login() {
         if (error) throw error
         if (!data.session) setMsg({ info: 'Check your email and tap the confirmation link, then sign in here.' })
       } else {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirect + '#/settings' })
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirect })
         if (error) throw error
-        setMsg({ info: 'If that email has an account, a reset link is on its way.' })
+        setMsg({ info: 'Check your email and tap the newest “Reset password” link. It opens a page where you choose a new password.' })
       }
     } catch (err) {
       setMsg({ error: err instanceof Error ? err.message : String(err) })
