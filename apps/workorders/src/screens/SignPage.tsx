@@ -4,6 +4,7 @@ import { money } from '../lib/money'
 import { Field, Toggle } from '../components/ui'
 import { SignaturePad } from '../components/SignaturePad'
 import { DocView } from '../components/DocView'
+import { PdfButton } from '../components/PdfButton'
 import type { RemoteDocument, SignatureKind } from '../lib/types'
 
 interface Result {
@@ -64,7 +65,8 @@ export default function SignPage({ token }: { token: string }) {
           <div className="banner" style={{ background: 'color-mix(in srgb, var(--green) 16%, transparent)' }}>
             <b>Signed. Thank you!</b> {d.doc.business.name} has your approval. Keep a copy for your records.
           </div>
-          <button onClick={() => window.print()}>Save a copy (PDF)</button>
+          <PdfButton doc={d.doc} logo={d.logo} title={d.label} terms={d.terms} label="Save a copy (PDF)"
+            sigs={[{ label: d.label, amount: d.amount, signer_name: r.signature!.signer_name, signed_at: r.signature!.signed_at, image: r.signature!.image, hash: r.signature!.snapshot_hash, remote: true }]} />
         </div>
       ) : (
         <div className="doc-actions no-print"><div className="banner">Please review below, then sign at the bottom to {d.label.toLowerCase()}.</div></div>
