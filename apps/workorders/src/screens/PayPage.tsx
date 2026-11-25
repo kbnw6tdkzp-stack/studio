@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { startCheckout } from '../lib/payments'
 import { money } from '../lib/money'
 import { DocView } from '../components/DocView'
+import { PdfButton } from '../components/PdfButton'
 import type { RemoteDocument } from '../lib/types'
 
 interface Result {
@@ -73,7 +74,7 @@ export default function PayPage({ token, returned }: { token: string; returned: 
           <div className="banner" style={{ background: 'color-mix(in srgb, var(--green) 16%, transparent)' }}>
             <b>Paid. Thank you!</b> {money(Number(r.total))} received by {d.doc.business.name}. Stripe also emails a receipt if you gave your email.
           </div>
-          <button onClick={() => window.print()}>Save a copy (PDF)</button>
+          <PdfButton doc={d.doc} logo={d.logo} title="Receipt" status={r.paid_at ? `Paid ${new Date(r.paid_at).toLocaleDateString()}` : 'Paid'} terms={[]} sigs={[]} label="Save receipt (PDF)" />
         </> : waiting ? (
           <div className="banner">Confirming your payment…</div>
         ) : (
