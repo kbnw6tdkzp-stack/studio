@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
-import { supabase } from './lib/supabase'
+import { authLink, supabase } from './lib/supabase'
 import { db, getMeta, setMeta } from './lib/db'
 import { pullAccount, startSync, stopSync } from './lib/sync'
 import { useLive, useRoute } from './lib/hooks'
@@ -15,6 +15,7 @@ import Money from './screens/Money'
 import Settings from './screens/Settings'
 import SignPage from './screens/SignPage'
 import PayPage from './screens/PayPage'
+import SetPassword from './screens/SetPassword'
 import { Tabs } from './components/Tabs'
 
 type CachedUser = { id: string; email: string }
@@ -22,6 +23,7 @@ type CachedUser = { id: string; email: string }
 export default function App() {
   const [user, setUser] = useState<CachedUser | null | undefined>(undefined)
   const [checking, setChecking] = useState(false)
+  const [recovering, setRecovering] = useState(authLink.type === 'recovery')
   const businesses = useLive(() => db.businesses.filter((b) => !b.deleted_at).toArray(), [])
   const business = businesses?.[0]
 
@@ -46,6 +48,7 @@ export default function App() {
       else setUser(null)
     })
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true)
       if (event === 'SIGNED_OUT') { void setMeta('user', null); setUser(null) }
       else if (session?.user) void apply(session.user)
     })
@@ -73,8 +76,10 @@ export default function App() {
   // Customers open signing links without an account.
   if (route[0] === 'sign' && route[1]) return <SignPage token={route[1]} />
   if (route[0] === 'pay' && route[1]) return <PayPage token={route[1]} returned={route[2] === 'done'} />
+  // Opened from a password-reset email: choose a new password before anything else.
+  if (recovering && user) return <SetPassword email={user.email} onDone={() => { setRecovering(false); location.hash = '#/orders' }} />
   if (user === undefined || businesses === undefined || checking) return <div className="app"><p className="empty">Loading…</p></div>
-  if (!user) return <Login />
+  if (!user) return <Login linkError={authLink.error} />
   if (!business) return <Onboarding userId={user.id} email={user.email} />
 
   const [a, b, c] = route
