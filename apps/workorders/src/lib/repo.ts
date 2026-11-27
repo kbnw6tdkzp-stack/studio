@@ -35,7 +35,7 @@ export async function saveCustomer(c: Customer) {
 }
 
 export const blankCustomer = (businessId: string): Customer => ({
-  id: uid(), business_id: businessId, name: '', company: '', phone: '', email: '', address: '', notes: '',
+  id: uid(), business_id: businessId, name: '', company: '', phone: '', mobile: '', email: '', address: '', notes: '',
   created_at: now(), updated_at: now(), deleted_at: null,
 })
 

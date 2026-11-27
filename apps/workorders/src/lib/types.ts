@@ -66,6 +66,8 @@ export interface Customer {
   name: string
   company: string
   phone: string
+  /** Cell number for texts, when `phone` is a house line. Older records may not have it. */
+  mobile?: string
   email: string
   address: string
   notes: string
