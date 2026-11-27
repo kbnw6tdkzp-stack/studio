@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Sheet } from './ui'
+import { Field, Sheet, Toggle } from './ui'
+import { saveCustomer } from '../lib/repo'
 import { cancelSignRequest, createSignRequest, linkFor, shareText } from '../lib/remoteSign'
 import { KIND_LABEL } from '../lib/customerDoc'
 import { money } from '../lib/money'
@@ -11,9 +12,25 @@ export const smsHref = (phone: string, body: string) => `sms:${phone.replace(/[^
 
 export function ShareButtons({ text, subject, url, customer }: { text: string; subject: string; url: string; customer?: Customer | null }) {
   const [copied, setCopied] = useState(false)
+  const textTo = customer?.mobile?.trim() || customer?.phone?.trim() || ''
+  const [other, setOther] = useState(!textTo)
+  const [num, setNum] = useState('')
+  const [remember, setRemember] = useState(true)
+  const digits = num.replace(/\D/g, '')
   return (
     <div className="stack" style={{ gap: 8 }}>
-      {customer?.phone && <a className="btn" href={smsHref(customer.phone, text)}>Text to {customer.phone}</a>}
+      {textTo && <a className="btn" href={smsHref(textTo, text)}>Text to {textTo}</a>}
+      {other ? (
+        <div className="card" style={{ gap: 8 }}>
+          <Field label={textTo ? 'Text a different number' : 'Text to (cell number)'} value={num} onChange={setNum} type="tel" inputMode="tel" placeholder="Cell number" />
+          {customer && <Toggle label={`Remember as ${customer.name || 'this customer'}’s cell`} checked={remember} onChange={setRemember} />}
+          {digits.length >= 10
+            ? <a className="btn" href={smsHref(num, text)} onClick={() => { if (customer && remember) void saveCustomer({ ...customer, mobile: num.trim() }) }}>Text to {num.trim()}</a>
+            : <button disabled>Enter a 10-digit number</button>}
+        </div>
+      ) : (
+        <button className="ghost" onClick={() => setOther(true)}>Text a different number…</button>
+      )}
       {typeof navigator.share === 'function' && (
         <button className="secondary" onClick={() => navigator.share({ title: subject, text }).catch(() => {})}>Share… (Messages, WhatsApp, Mail)</button>
       )}

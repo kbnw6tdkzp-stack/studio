@@ -42,7 +42,7 @@ export default function CustomerDetail({ id, business }: { id: string; business:
         <Section>
           <div className="row wrap">
             {c.phone && <a className="badge blue" href={`tel:${c.phone}`}>Call {c.phone}</a>}
-            {c.phone && <a className="badge blue" href={`sms:${c.phone}`}>Text</a>}
+            {(c.mobile || c.phone) && <a className="badge blue" href={`sms:${c.mobile || c.phone}`}>Text{c.mobile ? ` ${c.mobile}` : ''}</a>}
             {c.email && <a className="badge blue" href={`mailto:${c.email}`}>Email</a>}
             {c.address && <a className="badge blue" href={`https://maps.apple.com/?q=${encodeURIComponent(c.address)}`}>Directions</a>}
           </div>
